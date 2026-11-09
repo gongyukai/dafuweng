@@ -14,6 +14,7 @@ await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
 let nextId = 1;
 const pending = new Map();
 const errors = [];
+fs.mkdirSync('shots', { recursive: true });
 
 ws.onmessage = (e) => {
   const m = JSON.parse(e.data);
@@ -67,11 +68,33 @@ assert(tiles === 40, `应有 40 格，实际 ${tiles}`);
 assert(players === 4, `应有 4 名玩家，实际 ${players}`);
 console.log(`✅ 棋盘渲染：${tiles} 格 / ${players} 名玩家`);
 
-// 2. 掷骰子
+// 2. 大厅：选棋子后开始
+const hasStart = await ev("!!document.querySelector('button[data-act=\"start\"]')");
+if (hasStart) {
+  const pieces = await ev("document.querySelectorAll('.piece-opt').length");
+  assert(pieces >= 12, `棋子数量应 >= 12，实际 ${pieces}`);
+  await ev("document.querySelectorAll('.piece-opt')[2].click()");
+  await sleep(400);
+  console.log(`✅ 棋子选择器：${pieces} 种可选`);
+  await ev("document.querySelector('button[data-act=\"start\"]').click()");
+  await until("!!document.querySelector('button[data-act=\"roll\"]')", '开局后的掷骰按钮');
+  console.log('✅ 大厅开始游戏');
+}
+
+// 3. 掷骰子
 const hasRoll = await ev("!!document.querySelector('button[data-act=\"roll\"]')");
 assert(hasRoll, '没有掷骰子按钮');
 await ev("document.querySelector('button[data-act=\"roll\"]').click()");
 await until("document.querySelector('#logBody').textContent.includes('掷出')", '掷骰日志');
+const frames = await ev(`(async () => {
+  const el = document.querySelector('.tk');
+  if (!el) return 0;
+  const seen = new Set();
+  for (let i = 0; i < 24; i++) { seen.add(el.style.transform); await new Promise(r => setTimeout(r, 55)); }
+  return seen.size;
+})()`);
+assert(frames >= 2, `棋子应有逐格移动动画，实际位置变化 ${frames} 次`);
+console.log(`✅ 棋子移动动画：${frames} 个中间位置`);
 console.log('✅ 掷骰子按钮生效，日志已更新');
 
 // 3. 处理可能的购买 / 结束回合，直到轮换到电脑

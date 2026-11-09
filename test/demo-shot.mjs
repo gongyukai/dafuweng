@@ -31,6 +31,14 @@ async function ev(expression) {
 }
 const click = (sel) => ev(`(() => { const b = document.querySelector('${sel}'); if (!b || b.disabled) return false; b.click(); return true; })()`);
 
+// 单机会先停在大厅，点开始
+for (let i = 0; i < 20; i++) {
+  const started = await click('button[data-act="start"]');
+  if (started) break;
+  await sleep(300);
+}
+await sleep(400);
+
 for (let round = 0; round < 400; round++) {
   let acted = false;
   if (await click('button[data-act="roll"]')) acted = true;
@@ -57,7 +65,17 @@ const stats = await ev(`({
   props: document.querySelectorAll('.tile.owned').length,
   houses: document.querySelectorAll('.houses').length,
   round: document.querySelector('.round-line')?.textContent,
-  phase: document.querySelector('.act-head h3')?.textContent
+  phase: document.querySelector('#action .act-head h3')?.textContent
 })`);
 console.log('截图完成:', JSON.stringify(stats));
+
+// 全屏棋盘模式
+if (await ev("!!document.querySelector('#btnZen')")) {
+  await ev("document.querySelector('#btnZen').click()");
+  await sleep(900);
+  const shot2 = await send('Page.captureScreenshot', { format: 'png' });
+  fs.writeFileSync('screenshots/board-zen.png', Buffer.from(shot2.data, 'base64'));
+  const width = await ev("document.querySelector('#board').getBoundingClientRect().width");
+  console.log('全屏棋盘宽度:', Math.round(width));
+}
 process.exit(0);

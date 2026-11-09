@@ -21,20 +21,33 @@ const headers = {
 };
 
 async function api(p, method = 'GET', body) {
-  const res = await fetch(API + p, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const text = await res.text();
-  let data;
-  try { data = JSON.parse(text); } catch { data = text; }
-  if (!res.ok) {
-    const err = new Error(`${method} ${p} -> ${res.status} ${text.slice(0, 300)}`);
-    err.status = res.status;
-    throw err;
+  let lastErr;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const res = await fetch(API + p, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = text; }
+      if (!res.ok) {
+        const err = new Error(`${method} ${p} -> ${res.status} ${text.slice(0, 300)}`);
+        err.status = res.status;
+        // 5xx 才重试，4xx 直接抛
+        if (res.status < 500) throw err;
+        lastErr = err;
+      } else {
+        return data;
+      }
+    } catch (e) {
+      if (e.status && e.status < 500) throw e;
+      lastErr = e;
+    }
+    await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
   }
-  return data;
+  throw lastErr;
 }
 
 const files = execSync('git ls-files', { encoding: 'utf8' })

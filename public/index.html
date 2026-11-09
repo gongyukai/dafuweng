@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="中国城市版大富翁，2-6 人联机，支持 WebRTC 房主直连与本地服务器">
-<meta name="theme-color" content="#0e3b2e">
+<meta name="theme-color" content="#0d3a2c">
 <title>大富翁 · 中国城市版</title>
 <link rel="stylesheet" href="./style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎲</text></svg>">
@@ -39,43 +39,48 @@
 
 <div id="app" class="app hidden">
   <header class="topbar">
-    <div class="brand"><span class="dice-ico">🎲</span>大富翁</div>
+    <div class="brand"><span class="dice-ico">🎲</span>大富翁<span class="brand-sub">中国城市版</span></div>
     <div class="status" id="status">连接中…</div>
     <div class="room-pill">
       房间 <b id="roomCode">----</b>
-      <button class="btn tiny" id="btnCopy">复制邀请链接</button>
+      <button class="btn tiny" id="btnCopy">邀请链接</button>
+      <button class="btn tiny" id="btnZen">全屏棋盘</button>
       <button class="btn tiny" id="btnRules">规则</button>
       <button class="btn tiny" id="btnLeave">退出</button>
     </div>
   </header>
 
   <main class="layout">
+    <aside class="panel logcol">
+      <div class="tabs">
+        <button type="button" class="tab active" data-tab="log">日志</button>
+        <button type="button" class="tab" data-tab="chat">聊天</button>
+      </div>
+      <div class="log-body" id="logBody"></div>
+      <form class="chat-form hidden" id="chatForm">
+        <input id="chatInput" maxlength="120" placeholder="说点什么…">
+        <button class="btn tiny" type="submit">发送</button>
+      </form>
+    </aside>
+
     <section class="board-wrap">
-      <div class="board" id="board"></div>
+      <div class="board" id="board">
+        <div class="grid" id="gridLayer"></div>
+        <div class="token-layer" id="tokenLayer"></div>
+        <div class="center" id="centerLayer"></div>
+      </div>
     </section>
 
     <aside class="side">
       <section class="panel players" id="players"></section>
-
       <section class="panel action" id="action"></section>
-
-      <section class="panel logs">
-        <div class="tabs">
-          <button type="button" class="tab active" data-tab="log">日志</button>
-          <button type="button" class="tab" data-tab="chat">聊天</button>
-        </div>
-        <div class="log-body" id="logBody"></div>
-        <form class="chat-form hidden" id="chatForm">
-          <input id="chatInput" maxlength="120" placeholder="说点什么…">
-          <button class="btn tiny" type="submit">发送</button>
-        </form>
-      </section>
     </aside>
   </main>
 </div>
 
-<div id="toast" class="toast"></div>
+<button id="zenExit" class="zen-exit">退出全屏（F）</button>
 
+<div id="toast" class="toast"></div>
 <div id="modal" class="overlay hidden">
   <div class="modal-card start-card" id="modalCard"></div>
 </div>

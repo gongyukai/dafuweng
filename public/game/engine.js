@@ -3,6 +3,31 @@ import { BOARD, GROUPS, RAIL_TILES, UTIL_TILES } from './board.js';
 import { CHANCE, CHEST, DECK_NAME } from './cards.js';
 
 export const COLORS = ['#e14b4b', '#3d8ee0', '#e5c33c', '#3fae62', '#a165d8', '#e8853a'];
+
+// 可选棋子（Twemoji 素材，CC-BY 4.0）
+export const PIECES = [
+  { id: 'car', name: '跑车', file: '1f697.svg' },
+  { id: 'taxi', name: '出租车', file: '1f695.svg' },
+  { id: 'rocket', name: '火箭', file: '1f680.svg' },
+  { id: 'heli', name: '直升机', file: '1f681.svg' },
+  { id: 'boat', name: '帆船', file: '26f5.svg' },
+  { id: 'horse', name: '赛马', file: '1f40e.svg' },
+  { id: 'penguin', name: '企鹅', file: '1f427.svg' },
+  { id: 'dino', name: '恐龙', file: '1f996.svg' },
+  { id: 'hat', name: '礼帽', file: '1f3a9.svg' },
+  { id: 'cat', name: '小猫', file: '1f431.svg' },
+  { id: 'fox', name: '狐狸', file: '1f98a.svg' },
+  { id: 'panda', name: '熊猫', file: '1f43c.svg' },
+];
+
+export function pieceOf(id) {
+  return PIECES.find((p) => p.id === id) || PIECES[0];
+}
+
+function nextFreePiece(room) {
+  const used = new Set(room.players.map((p) => p.piece));
+  return (PIECES.find((p) => !used.has(p.id)) || PIECES[0]).id;
+}
 export const START_CASH = 1500;
 export const GO_SALARY = 200;
 export const JAIL_FINE = 50;
@@ -126,6 +151,7 @@ export function addPlayer(room, name, opts = {}) {
     token: opts.token || uid('t'),
     name: clean,
     color: COLORS[room.players.length % COLORS.length],
+    piece: nextFreePiece(room),
     cash: START_CASH,
     pos: 0,
     inJail: false,
@@ -727,6 +753,16 @@ export function act(room, playerId, action) {
       if (!target || !target.isBot) return fail('只能移除电脑玩家');
       return removePlayer(room, target.id);
     }
+    if (type === 'setPiece') {
+      const piece = PIECES.find((x) => x.id === action.piece);
+      if (!piece) return fail('没有这个棋子');
+      if (room.players.some((x) => x.id !== p.id && x.piece === piece.id)) {
+        return fail('这个棋子已经被别人选了');
+      }
+      p.piece = piece.id;
+      room.seq++;
+      return ok();
+    }
     return fail('游戏还没有开始');
   }
 
@@ -846,6 +882,7 @@ export function view(room, youId) {
       id: p.id,
       name: p.name,
       color: p.color,
+      piece: p.piece,
       cash: p.cash,
       pos: p.pos,
       inJail: p.inJail,

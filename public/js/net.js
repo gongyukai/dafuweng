@@ -3,7 +3,7 @@
 //   HostNet  —— 浏览器当主机，WebRTC 直连（GitHub Pages 可用）
 //   GuestNet —— 加入上面的房主
 //   LocalNet —— 单机人机对战，不联网
-import { createRoom, addPlayer, startGame, act, view, tickBots } from '../game/engine.js';
+import { createRoom, addPlayer, act, view, tickBots } from '../game/engine.js';
 
 const PEER_PREFIX = 'dmj-cn-';
 const PEER_OPTS = {
@@ -183,7 +183,7 @@ export class LocalNet {
     const me = addPlayer(room, name);
     const bots = ['阿福', '小美', '老王', '阿强', '丽丽'].slice(0, Math.max(1, Math.min(5, opts.bots || 3)));
     for (const b of bots) addPlayer(room, b, { isBot: true });
-    startGame(room);
+    // 先停在大厅，让玩家挑棋子，再点开始
     this.playerId = me.player.id;
     this.h.onSelf({ code: 'SOLO', playerId: this.playerId, token: null });
     this.host = new EngineHost({
