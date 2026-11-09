@@ -227,7 +227,10 @@ function tileEl(t, v) {
 
   const parts = [];
   if (t.type === 'prop') {
-    parts.push(`<div class="band" style="background:${GROUPS[t.group].color}"></div>`);
+    const g = GROUPS[t.group];
+    el.style.background = `linear-gradient(180deg, ${g.color}30, #fffdf6 62%)`;
+    parts.push(`<div class="band" style="background:linear-gradient(180deg, ${g.color}, ${g.color}b8)"></div>`);
+    parts.push(`<img class="wm" src="${icon(`${t.icon}.svg`)}" alt="">`);
   }
 
   const ownerId = v.owners[t.i];
