@@ -238,6 +238,7 @@ function handleTrade(room, p, action) {
       toId: to.id,
       give: { cash: giveCash, tiles: giveTiles },
       get: { cash: getCash, tiles: getTiles },
+      createdAt: Date.now(),
       expiresAt: Date.now() + 120000,
     };
     pushLog(room, `${p.name} 向 ${to.name} 发起交易：给 ${tradeText(room, room.trade.give)}，换 ${tradeText(room, room.trade.get)}`, 'trade');
@@ -924,8 +925,38 @@ function botBuild(room, p) {
   return -1;
 }
 
+function tradeAssetValue(room, side) {
+  let v = side.cash;
+  for (const i of side.tiles) {
+    const tile = BOARD[i];
+    v += tile.price;
+    if (tile.type === 'prop') v += (room.houses[i] || 0) * GROUPS[tile.group].houseCost;
+  }
+  return v;
+}
+
+function botTradeDecision(room, bot, trade) {
+  const gets = tradeAssetValue(room, trade.give);   // 机器人得到的
+  const gives = tradeAssetValue(room, trade.get);   // 机器人付出的
+  if (gets <= 0 && gives > 0) return false;
+  // 稍微高估自己手里的地，避免被白嫖
+  return gets >= gives * 1.05;
+}
+
 export function tickBots(room) {
   if (room.phase === 'lobby' || room.phase === 'ended') return false;
+
+  // 机器人对交易报价的回应
+  const trade = currentTrade(room);
+  if (trade && Date.now() - (trade.createdAt || 0) > 1500) {
+    const target = byId(room, trade.toId);
+    if (target && target.isBot && !target.bankrupt) {
+      const accept = botTradeDecision(room, target, trade);
+      act(room, target.id, { type: accept ? 'tradeAccept' : 'tradeReject', id: trade.id });
+      return true;
+    }
+  }
+
   const p = currentPlayer(room);
   if (!p || !p.isBot || p.bankrupt) return false;
   const rng = room.rng;

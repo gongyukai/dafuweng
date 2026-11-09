@@ -1,5 +1,5 @@
 // 玩家交易单测：发起、接受、拒绝、取消、非法内容、过期
-import { createRoom, addPlayer, startGame, act, view, currentTrade } from '../public/game/engine.js';
+import { createRoom, addPlayer, startGame, act, view, currentTrade, tickBots } from '../public/game/engine.js';
 
 let passed = 0;
 function expect(cond, msg) {
@@ -110,6 +110,40 @@ console.log('\n交易后租金归属');
   act(room, p2.id, { type: 'roll' });
   // 0.999 → 骰子 6+6=12，不一定落在 1；这里只验证不报错
   expect(p2.cash >= 0, '交易后掷骰正常');
+}
+
+console.log('\n机器人回应交易');
+{
+  const room = createRoom('BOT');
+  const p1 = addPlayer(room, '甲').player;
+  const bot = addPlayer(room, '机器人', { isBot: true }).player;
+  startGame(room);
+  room.owners[1] = p1.id;   // 台北 60
+  room.owners[6] = bot.id;  // 香港 100
+  p1.cash = 500;
+  bot.cash = 500;
+  // 甲给台北 + ¥50 换香港：机器人得到 110，付出 100 → 应该接受
+  act(room, p1.id, { type: 'tradeOffer', toId: bot.id, giveTiles: [1], giveCash: 50, getTiles: [6] });
+  room.trade.createdAt = Date.now() - 5000;
+  const acted = tickBots(room);
+  expect(acted, '机器人有动作');
+  expect(room.trade === null, '机器人处理了报价');
+  expect(room.owners[6] === p1.id, '机器人接受了划算的交易');
+
+  // 反向：甲用台北换香港，机器人亏 → 拒绝
+  const room2 = createRoom('BOT2');
+  const a = addPlayer(room2, '甲').player;
+  const b = addPlayer(room2, '机器人', { isBot: true }).player;
+  startGame(room2);
+  room2.owners[1] = a.id;
+  room2.owners[6] = b.id;
+  a.cash = 500;
+  b.cash = 500;
+  act(room2, a.id, { type: 'tradeOffer', toId: b.id, giveTiles: [1], getTiles: [6] });
+  room2.trade.createdAt = Date.now() - 5000;
+  tickBots(room2);
+  expect(room2.trade === null, '机器人也会拒绝不划算的交易');
+  expect(room2.owners[1] === a.id, '拒绝后地产不变');
 }
 
 console.log(`\n🎉 交易单测全部通过（${passed} 项断言）`);
