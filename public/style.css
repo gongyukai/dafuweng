@@ -162,7 +162,7 @@ button, input { font: inherit; color: inherit; }
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 252px minmax(0, 1fr) 396px;
+  grid-template-columns: 252px minmax(0, 1fr) 410px;
   gap: 12px;
   padding: 12px 14px 14px;
 }
@@ -208,6 +208,7 @@ button, input { font: inherit; color: inherit; }
 .log-line.build { color: #a9dfc0; }
 .log-line.jail { color: #f0b4d8; }
 .log-line.card { color: #cbb8ff; }
+.log-line.trade { color: #ffd08a; font-weight: 600; }
 .log-line.turn { color: var(--gold); font-weight: 700; }
 .log-line.system { color: var(--gold); font-weight: 700; }
 .log-line.bankrupt { color: #ff9c92; font-weight: 700; }
@@ -229,7 +230,37 @@ button, input { font: inherit; color: inherit; }
 
 /* ---------------- 棋盘 ---------------- */
 
-.board-wrap { display: grid; place-items: center; min-height: 0; min-width: 0; }
+.board-wrap { position: relative; display: grid; place-items: center; min-height: 0; min-width: 0; }
+
+/* 行动字幕：把每个玩家的操作放大显示，然后渐隐 */
+.subtitle {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translate(-50%, 12px);
+  max-width: 90%;
+  padding: 10px 22px;
+  border-radius: 14px;
+  background: rgba(4, 18, 13, 0.92);
+  border: 1px solid rgba(233, 196, 134, 0.42);
+  color: #f6efdd;
+  font-size: clamp(14px, 1.9vh, 20px);
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.45;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.28s ease, transform 0.28s ease;
+  z-index: 45;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+}
+.subtitle.show { opacity: 1; transform: translate(-50%, 0); }
+.subtitle.kind-card { border-color: rgba(203, 184, 255, 0.55); color: #e8e0ff; }
+.subtitle.kind-rent { border-color: rgba(255, 179, 166, 0.55); color: #ffd9d3; }
+.subtitle.kind-buy { border-color: rgba(181, 232, 201, 0.55); color: #d8ffe8; }
+.subtitle.kind-jail { border-color: rgba(240, 180, 216, 0.55); color: #ffd9ef; }
+.subtitle.kind-trade { border-color: rgba(233, 196, 134, 0.75); color: var(--gold); }
+.subtitle.kind-bankrupt { border-color: rgba(226, 87, 76, 0.6); color: #ffb3a6; }
 
 .board {
   position: relative;
@@ -535,7 +566,7 @@ button, input { font: inherit; color: inherit; }
   opacity: 0.75;
   filter: blur(0.5px);
 }
-.tk.walking img { animation: hop 0.22s linear infinite; }
+.tk.walking img { animation: hop 0.32s linear infinite; }
 .tk.jump { animation: teleportIn 0.38s ease; }
 
 .float-money {
@@ -690,6 +721,118 @@ button, input { font: inherit; color: inherit; }
 .over-card td { padding: 6px 4px; border-bottom: 1px solid var(--line); text-align: left; }
 .over-card td:last-child { text-align: right; font-variant-numeric: tabular-nums; color: var(--gold); }
 
+/* ---------------- 玩家交易 ---------------- */
+
+.trade-open { margin-bottom: 10px; }
+
+.trade-wait {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--gold);
+  background: rgba(233, 196, 134, 0.1);
+  border: 1px solid rgba(233, 196, 134, 0.38);
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+
+.trade-ask {
+  border: 1px solid rgba(233, 196, 134, 0.5);
+  border-radius: 12px;
+  background: rgba(233, 196, 134, 0.08);
+  padding: 10px;
+  margin-bottom: 10px;
+}
+.ta-head { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 13px; color: var(--gold); margin-bottom: 6px; }
+.ta-head img { width: 22px; height: 22px; object-fit: contain; }
+.ta-body { font-size: 12px; color: var(--muted); margin-bottom: 8px; display: flex; flex-direction: column; gap: 3px; }
+.ta-body span { display: inline-block; width: 4.6em; color: #8fa89b; }
+.ta-body b { color: var(--text); font-weight: 600; }
+
+.modal-card.wide { max-width: min(940px, 94vw); }
+
+.trade-title { margin: 0 0 4px; font-size: 20px; text-align: left; }
+.trade-hint { margin: 0 0 12px; font-size: 12px; color: var(--muted); text-align: left; line-height: 1.6; }
+
+.trade-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.trade-tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.trade-tab img { width: 20px; height: 20px; object-fit: contain; }
+.trade-tab.on { border-color: var(--gold); background: rgba(233, 196, 134, 0.16); color: var(--gold); }
+
+.trade-cols { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: start; }
+.trade-col {
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  text-align: left;
+}
+.trade-col h4 {
+  margin: 0 0 9px;
+  font-size: 12.5px;
+  color: var(--muted);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+.trade-col h4 b { color: var(--text); font-size: 13px; }
+.trade-col h4 span { font-size: 11.5px; color: var(--gold); }
+
+.trade-cash { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+.trade-cash input {
+  width: 120px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.3);
+  outline: none;
+}
+.trade-cash input:focus { border-color: var(--gold); }
+
+.trade-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.ttile {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 7px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  font-size: 11.5px;
+  text-align: left;
+}
+.ttile i { width: 6px; height: 16px; border-radius: 2px; flex: none; }
+.ttile span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ttile em { font-style: normal; color: var(--gold); font-size: 10px; }
+.ttile.sel { border-color: var(--gold); background: rgba(233, 196, 134, 0.16); }
+.ttile:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.trade-arrow { display: grid; place-items: center; font-size: 24px; color: var(--gold); padding-top: 44px; }
+.trade-summary { margin: 14px 0 12px; font-size: 12.5px; color: var(--muted); text-align: center; }
+.trade-summary b { color: var(--gold); font-weight: 700; }
+.trade-actions .btn { min-width: 160px; }
+
 /* ---------------- Toast / 弹窗 ---------------- */
 
 .toast {
@@ -774,6 +917,11 @@ body.zen .zen-exit { display: block; }
 }
 
 /* ---------------- 响应式 ---------------- */
+
+@media (max-width: 700px) {
+  .trade-cols { grid-template-columns: 1fr; }
+  .trade-arrow { padding-top: 0; transform: rotate(90deg); }
+}
 
 @media (max-width: 1180px) {
   .layout {

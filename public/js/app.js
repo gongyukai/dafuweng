@@ -26,6 +26,7 @@ const S = {
   tokens: new Map(),
   lastCash: new Map(),
   ready: false,
+  trade: null,
 };
 
 const PIPS = {
@@ -84,6 +85,48 @@ function getName() {
   const fallback = `玩家${Math.floor(Math.random() * 90 + 10)}`;
   localStorage.setItem('dmj.name', fallback);
   return fallback;
+}
+
+// ---------------- 行动字幕 ----------------
+
+const SUB_KINDS = new Set(['dice', 'money', 'rent', 'buy', 'card', 'jail', 'build', 'bankrupt', 'trade']);
+const subQueue = [];
+let subBusy = false;
+let lastLogId = null;
+
+function syncSubtitles(v) {
+  const logs = v.log || [];
+  if (!logs.length) return;
+  const newest = logs[logs.length - 1].id;
+  if (lastLogId == null) { lastLogId = newest; return; }
+  if (newest <= lastLogId) return;
+  const fresh = logs.filter((l) => l.id > lastLogId && SUB_KINDS.has(l.kind));
+  lastLogId = newest;
+  if (!fresh.length) return;
+  subQueue.push(...fresh.slice(-3));
+  while (subQueue.length > 2) subQueue.shift();
+  if (!subBusy) pumpSubtitles();
+}
+
+async function pumpSubtitles() {
+  subBusy = true;
+  const el = $('#subtitle');
+  while (subQueue.length) {
+    const item = subQueue.shift();
+    el.textContent = item.text;
+    el.className = `subtitle show kind-${item.kind}`;
+    await sleep(1400);
+    el.classList.remove('show');
+    await sleep(260);
+  }
+  subBusy = false;
+}
+
+function resetSubtitles() {
+  subQueue.length = 0;
+  lastLogId = null;
+  const el = $('#subtitle');
+  if (el) { el.className = 'subtitle'; el.textContent = ''; }
 }
 
 // ---------------- 联机入口 ----------------
@@ -164,6 +207,7 @@ function leave() {
   S.view = null;
   S.me = null;
   S.tokens.clear();
+  resetSubtitles();
   const url = new URL(location.href);
   url.searchParams.delete('room');
   location.href = url.toString();
@@ -297,7 +341,7 @@ async function walkToken(t, from, to, v) {
     t.el.classList.add('jump');
     t.pos = to;
     layoutToken(t);
-    await sleep(380);
+    await sleep(520);
     t.el.classList.remove('jump');
   } else {
     t.el.classList.add('walking');
@@ -305,7 +349,7 @@ async function walkToken(t, from, to, v) {
       const box = tileBox((from + i) % 40);
       const y = box.y + box.h - tokenWidth() * 0.78;
       t.el.style.transform = `translate(${box.x + box.w / 2}px, ${y}px) translate(-50%, -50%)`;
-      await sleep(110);
+      await sleep(170);
     }
     t.pos = to;
     t.el.classList.remove('walking');
@@ -649,6 +693,134 @@ function actionProps(v, me, myTurn) {
   return `<div class="props"><h4><span>我的地产</span><span>${mine.length} 块</span></h4>${rows}</div>`;
 }
 
+// ---------------- 玩家交易 ----------------
+
+function sideText(side) {
+  const parts = [];
+  if (side.cash > 0) parts.push(`¥${fmt(side.cash)}`);
+  for (const i of side.tiles) parts.push(BOARD[i] ? (BOARD[i].short || BOARD[i].name) : '?');
+  return parts.length ? parts.join(' + ') : '什么也不给';
+}
+
+function tradeBarHTML(v, me) {
+  const t = v.trade;
+  if (t && t.toId === me.id) {
+    const from = v.players.find((p) => p.id === t.fromId);
+    if (!from) return '';
+    return `<div class="trade-ask">
+      <div class="ta-head"><img src="${icon(pieceOf(from.piece).file)}" alt="">${esc(from.name)} 想和你交易</div>
+      <div class="ta-body">
+        <div><span>他给你</span><b>${esc(sideText(t.give))}</b></div>
+        <div><span>他要走</span><b>${esc(sideText(t.get))}</b></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" data-act="tradeAccept" data-id="${t.id}">接受</button>
+        <button class="btn" data-act="tradeReject" data-id="${t.id}">拒绝</button>
+      </div>
+    </div>`;
+  }
+  if (t && t.fromId === me.id) {
+    const to = v.players.find((p) => p.id === t.toId);
+    return `<div class="trade-wait">
+      <span>已向 ${esc(to ? to.name : '对方')} 发起交易，等待回应…</span>
+      <button class="btn tiny" data-act="tradeCancel" data-id="${t.id}">取消</button>
+    </div>`;
+  }
+  return '<button class="btn wide trade-open" data-ui="trade">🤝 发起交易</button>';
+}
+
+function tileBtn(v, i, side, selected) {
+  const t = BOARD[i];
+  const g = t.group ? GROUPS[t.group] : null;
+  const h = v.houses[i] || 0;
+  return `<button class="ttile${selected ? ' sel' : ''}" data-side="${side}" data-tile="${i}" ${h > 0 ? 'disabled title="有房子的地产不能交易，先卖掉房子"' : ''}>
+    <i style="background:${g ? g.color : '#8fa39a'}"></i>
+    <span>${esc(t.short || t.name)}</span>
+    ${h ? `<em>${h >= 5 ? '馆' : h}</em>` : ''}
+  </button>`;
+}
+
+function openTradeModal() {
+  const v = S.view;
+  if (!v) return;
+  const me = v.players.find((p) => p.id === S.me);
+  if (!me) return;
+  const others = v.players.filter((p) => p.id !== me.id && !p.bankrupt);
+  if (!others.length) { toast('没有可以交易的对手'); return; }
+  S.trade = { toId: others[0].id, give: new Set(), get: new Set(), giveCash: 0, getCash: 0 };
+  $('#modalCard').classList.add('wide');
+  renderTradeModal();
+  $('#modal').classList.remove('hidden');
+}
+
+function renderTradeModal() {
+  const v = S.view;
+  if (!v || !S.trade) return;
+  const me = v.players.find((p) => p.id === S.me);
+  const others = v.players.filter((p) => p.id !== me.id && !p.bankrupt);
+  const to = v.players.find((p) => p.id === S.trade.toId) || others[0];
+  if (!to) return;
+  S.trade.toId = to.id;
+  const mine = Object.keys(v.owners).filter((i) => v.owners[i] === me.id).map(Number).sort((a, b) => a - b);
+  const theirs = Object.keys(v.owners).filter((i) => v.owners[i] === to.id).map(Number).sort((a, b) => a - b);
+  const tabs = others.map((p) => `<button class="trade-tab${p.id === to.id ? ' on' : ''}" data-to="${p.id}">
+      <img src="${icon(pieceOf(p.piece).file)}" alt="">${esc(p.name)}
+    </button>`).join('');
+
+  $('#modalCard').innerHTML = `<h2 class="trade-title">玩家间交易</h2>
+    <p class="trade-hint">选地产和现金，对方同意后立刻生效。有房子的地产要先卖掉才能交易。</p>
+    <div class="trade-tabs">${tabs}</div>
+    <div class="trade-cols">
+      <div class="trade-col">
+        <h4>你给出 <b>${esc(me.name)}</b><span>现金 ¥${fmt(me.cash)}</span></h4>
+        <label class="trade-cash">现金 <input type="number" min="0" max="${me.cash}" step="10" value="${S.trade.giveCash}" data-cash="give"></label>
+        <div class="trade-tiles">${mine.map((i) => tileBtn(v, i, 'give', S.trade.give.has(i))).join('') || '<div class="empty">你没有地产</div>'}</div>
+      </div>
+      <div class="trade-arrow">⇄</div>
+      <div class="trade-col">
+        <h4>你获得 <b>${esc(to.name)}</b><span>现金 ¥${fmt(to.cash)}</span></h4>
+        <label class="trade-cash">现金 <input type="number" min="0" max="${to.cash}" step="10" value="${S.trade.getCash}" data-cash="get"></label>
+        <div class="trade-tiles">${theirs.map((i) => tileBtn(v, i, 'get', S.trade.get.has(i))).join('') || '<div class="empty">对方没有地产</div>'}</div>
+      </div>
+    </div>
+    <div class="trade-summary"></div>
+    <div class="btn-row trade-actions">
+      <button class="btn primary big" id="tradeSubmit">发起交易</button>
+      <button class="btn big" id="tradeClose">取消</button>
+    </div>`;
+  updateTradeSummary();
+}
+
+function updateTradeSummary() {
+  const el = document.querySelector('#modalCard .trade-summary');
+  if (!el || !S.trade) return;
+  const list = (set, cash) => {
+    const parts = [];
+    if (cash > 0) parts.push(`¥${fmt(cash)}`);
+    for (const i of set) parts.push(BOARD[i].short || BOARD[i].name);
+    return parts.length ? parts.join(' + ') : '什么也不给';
+  };
+  el.innerHTML = `你付出 <b>${esc(list(S.trade.give, S.trade.giveCash))}</b>，得到 <b>${esc(list(S.trade.get, S.trade.getCash))}</b>`;
+  const btn = $('#tradeSubmit');
+  if (btn) btn.disabled = !S.trade.give.size && !S.trade.get.size && !S.trade.giveCash && !S.trade.getCash;
+}
+
+function submitTrade() {
+  const s = S.trade;
+  if (!s || !S.net) return;
+  if (!s.give.size && !s.get.size && !s.giveCash && !s.getCash) { toast('先选地产或填现金'); return; }
+  S.net.send({
+    type: 'tradeOffer',
+    toId: s.toId,
+    giveTiles: [...s.give],
+    getTiles: [...s.get],
+    giveCash: s.giveCash,
+    getCash: s.getCash,
+  });
+  hideModal();
+  toast('交易已发起，等待对方回应');
+}
+
 function renderAction(v) {
   const me = v.players.find((p) => p.id === S.me);
   const el = $('#action');
@@ -670,6 +842,7 @@ function renderAction(v) {
     html = `<div class="act-head"><h3>等待中</h3></div>
       <p class="act-msg">等待 <b>${esc(t ? t.name : '…')}</b> 行动${t && t.isBot ? '（电脑思考中）' : ''}…</p>`;
   }
+  html += tradeBarHTML(v, me);
   html += actionProps(v, me, myTurn);
   el.innerHTML = html;
 }
@@ -706,6 +879,7 @@ function render() {
   renderAction(v);
   renderLog(v);
   renderChat(v);
+  syncSubtitles(v);
 }
 
 function renderBoard(v) {
@@ -747,6 +921,11 @@ $('#players').addEventListener('click', (e) => {
 });
 
 $('#action').addEventListener('click', (e) => {
+  const uiBtn = e.target.closest('button[data-ui]');
+  if (uiBtn) {
+    if (uiBtn.dataset.ui === 'trade') openTradeModal();
+    return;
+  }
   const btn = e.target.closest('button[data-act]');
   if (!btn || btn.disabled || !S.net) return;
   const now = Date.now();
@@ -836,8 +1015,44 @@ function showModal(html) {
   if (close) close.addEventListener('click', hideModal);
 }
 
-function hideModal() { $('#modal').classList.add('hidden'); }
+function hideModal() {
+  $('#modal').classList.add('hidden');
+  $('#modalCard').classList.remove('wide');
+  S.trade = null;
+}
 $('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal') hideModal(); });
+
+$('#modalCard').addEventListener('click', (e) => {
+  const tab = e.target.closest('.trade-tab');
+  if (tab && S.trade) {
+    S.trade.toId = tab.dataset.to;
+    S.trade.get = new Set();
+    S.trade.getCash = 0;
+    renderTradeModal();
+    return;
+  }
+  const tile = e.target.closest('.ttile');
+  if (tile && !tile.disabled && S.trade) {
+    const side = tile.dataset.side;
+    const i = Number(tile.dataset.tile);
+    const set = side === 'give' ? S.trade.give : S.trade.get;
+    if (set.has(i)) { set.delete(i); tile.classList.remove('sel'); }
+    else { set.add(i); tile.classList.add('sel'); }
+    updateTradeSummary();
+    return;
+  }
+  if (e.target.id === 'tradeSubmit') submitTrade();
+  else if (e.target.id === 'tradeClose') hideModal();
+});
+
+$('#modalCard').addEventListener('input', (e) => {
+  const inp = e.target.closest('input[data-cash]');
+  if (!inp || !S.trade) return;
+  const val = Math.max(0, Math.floor(Number(inp.value) || 0));
+  if (inp.dataset.cash === 'give') S.trade.giveCash = val;
+  else S.trade.getCash = val;
+  updateTradeSummary();
+});
 
 // ---------------- 启动 ----------------
 

@@ -86,6 +86,8 @@ const hasRoll = await ev("!!document.querySelector('button[data-act=\"roll\"]')"
 assert(hasRoll, '没有掷骰子按钮');
 await ev("document.querySelector('button[data-act=\"roll\"]').click()");
 await until("document.querySelector('#logBody').textContent.includes('掷出')", '掷骰日志');
+await until("document.querySelector('#subtitle').textContent.includes('掷出')", '行动字幕');
+console.log('✅ 行动字幕显示：' + (await ev("document.querySelector('#subtitle').textContent")));
 const frames = await ev(`(async () => {
   const el = document.querySelector('.tk');
   if (!el) return 0;
@@ -109,6 +111,16 @@ if (endBtn) {
   console.log('✅ 结束回合按钮生效');
 }
 await sleep(1200);
+
+// 交易弹窗
+const hasTrade = await ev("!!document.querySelector('button[data-ui=\"trade\"]')");
+assert(hasTrade, '应有发起交易按钮');
+await ev("document.querySelector('button[data-ui=\"trade\"]').click()");
+await until("!!document.querySelector('.trade-cols')", '交易弹窗');
+const tradeCols = await ev("document.querySelectorAll('.trade-col').length");
+assert(tradeCols === 2, `交易弹窗应有两栏，实际 ${tradeCols}`);
+await ev("document.querySelector('#tradeClose').click()");
+console.log('✅ 交易弹窗可打开（两栏）');
 
 // 4. 机器人自动行动
 const turnText = await ev("document.querySelector('.act-msg')?.textContent || ''");

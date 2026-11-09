@@ -1,4 +1,5 @@
 // 当 github.com:443 连不上时，用 api.github.com 推送工作区快照
+// 文本文件内联进 tree（1 次请求），只有二进制文件才单独建 blob
 // 用法：GH_TOKEN=xxx node scripts/api-push.mjs [owner] [repo] [message]
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -14,6 +15,11 @@ const repo = process.argv[3] || 'dafuweng';
 const message = process.argv[4] || '更新站点';
 const API = 'https://api.github.com';
 
+const TEXT_EXT = new Set([
+  '.js', '.mjs', '.cjs', '.json', '.css', '.html', '.htm', '.md', '.yml', '.yaml',
+  '.txt', '.svg', '.bat', '.ps1', '.gitignore', '.nojekyll',
+]);
+
 const headers = {
   Authorization: `token ${token}`,
   'User-Agent': 'dafuweng-push',
@@ -22,7 +28,7 @@ const headers = {
 
 async function api(p, method = 'GET', body) {
   let lastErr;
-  for (let attempt = 0; attempt < 5; attempt++) {
+  for (let attempt = 0; attempt < 6; attempt++) {
     try {
       const res = await fetch(API + p, {
         method,
@@ -35,7 +41,6 @@ async function api(p, method = 'GET', body) {
       if (!res.ok) {
         const err = new Error(`${method} ${p} -> ${res.status} ${text.slice(0, 300)}`);
         err.status = res.status;
-        // 5xx 才重试，4xx 直接抛
         if (res.status < 500) throw err;
         lastErr = err;
       } else {
@@ -45,18 +50,17 @@ async function api(p, method = 'GET', body) {
       if (e.status && e.status < 500) throw e;
       lastErr = e;
     }
-    await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+    await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
   }
   throw lastErr;
 }
 
-const files = execSync('git ls-files', { encoding: 'utf8' })
+const files = execSync('git -c core.quotepath=false ls-files', { encoding: 'utf8' })
   .split(/\r?\n/)
   .filter(Boolean);
-
 console.log(`准备推送 ${files.length} 个文件到 ${owner}/${repo}`);
 
-// 空仓库不能直接建 blob，先用 Contents API 打一个初始提交
+// 空仓库不能直接建 blob/tree，先用 Contents API 打一个初始提交
 let parent = null;
 try {
   const ref = await api(`/repos/${owner}/${repo}/git/ref/heads/main`);
@@ -72,13 +76,23 @@ try {
 }
 
 const tree = [];
+let binary = 0;
 for (const file of files) {
-  const content = fs.readFileSync(file).toString('base64');
-  const blob = await api(`/repos/${owner}/${repo}/git/blobs`, 'POST', { content, encoding: 'base64' });
-  tree.push({ path: file.split(path.sep).join('/'), mode: '100644', type: 'blob', sha: blob.sha });
-  process.stdout.write('.');
+  const ext = path.extname(file).toLowerCase();
+  const posix = file.split(path.sep).join('/');
+  if (TEXT_EXT.has(ext) || TEXT_EXT.has(path.basename(file))) {
+    tree.push({ path: posix, mode: '100644', type: 'blob', content: fs.readFileSync(file, 'utf8') });
+  } else {
+    const blob = await api(`/repos/${owner}/${repo}/git/blobs`, 'POST', {
+      content: fs.readFileSync(file).toString('base64'),
+      encoding: 'base64',
+    });
+    tree.push({ path: posix, mode: '100644', type: 'blob', sha: blob.sha });
+    binary++;
+    process.stdout.write('*');
+  }
 }
-console.log('');
+console.log(`\n内联文本 ${tree.length - binary} 个，上传二进制 ${binary} 个`);
 
 const treeRes = await api(`/repos/${owner}/${repo}/git/trees`, 'POST', { tree });
 const commit = await api(`/repos/${owner}/${repo}/git/commits`, 'POST', {
@@ -86,12 +100,7 @@ const commit = await api(`/repos/${owner}/${repo}/git/commits`, 'POST', {
   tree: treeRes.sha,
   parents: parent ? [parent] : [],
 });
-
-if (parent) {
-  await api(`/repos/${owner}/${repo}/git/refs/heads/main`, 'PATCH', { sha: commit.sha, force: true });
-} else {
-  await api(`/repos/${owner}/${repo}/git/refs`, 'POST', { ref: 'refs/heads/main', sha: commit.sha });
-}
+await api(`/repos/${owner}/${repo}/git/refs/heads/main`, 'PATCH', { sha: commit.sha, force: true });
 
 console.log(`已推送 commit ${commit.sha.slice(0, 7)}`);
 console.log(`https://github.com/${owner}/${repo}/commit/${commit.sha}`);

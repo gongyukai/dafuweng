@@ -78,6 +78,7 @@ await guest.connect();
 console.log('✅ 两个浏览器页面已连接');
 
 // 确认走的是 P2P 模式（没有 /api）
+await host.until("document.querySelector('#startHint')?.textContent.includes('WebRTC')", '识别 WebRTC 模式');
 const hint = await host.ev("document.querySelector('#startHint').textContent");
 assert(hint.includes('WebRTC'), `应提示 WebRTC 模式，实际：${hint}`);
 console.log('✅ 识别为纯静态托管，使用 WebRTC 模式');

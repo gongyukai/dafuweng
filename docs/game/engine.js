@@ -84,6 +84,7 @@ export function createRoom(code) {
     doubles: 0,
     pendingBuy: null,
     lastCard: null,
+    trade: null,
     winnerId: null,
     log: [],
     logSeq: 0,
@@ -123,6 +124,7 @@ export function resetRoom(room) {
   room.doubles = 0;
   room.pendingBuy = null;
   room.lastCard = null;
+  room.trade = null;
   room.winnerId = null;
   room.finalRank = null;
   room.log = [];
@@ -178,10 +180,106 @@ export function removePlayer(room, id) {
   const p = room.players[idx];
   if (p.id === room.hostId) return { ok: false, err: '房主不能被移除' };
   room.players.splice(idx, 1);
-  room.players.forEach((x, i) => { x.color = COLORS[i % COLORS.length]; });
+  room.players.forEach((p, i) => { p.color = COLORS[i % COLORS.length]; });
   room.seq++;
   pushLog(room, `${p.name} 离开了房间`, 'system');
   return { ok: true };
+}
+
+// ---------------- 玩家间交易 ----------------
+
+function tileOkForTrade(room, i, ownerId) {
+  const tile = BOARD[i];
+  if (!tile) return false;
+  if (room.owners[i] !== ownerId) return false;
+  if ((room.houses[i] || 0) > 0) return false;
+  return true;
+}
+
+function tradeText(room, side) {
+  const parts = [];
+  if (side.cash > 0) parts.push(`¥${side.cash}`);
+  for (const i of side.tiles) parts.push(BOARD[i].name);
+  return parts.length ? parts.join(' + ') : '什么也不给';
+}
+
+export function currentTrade(room) {
+  if (!room.trade) return null;
+  if (Date.now() > room.trade.expiresAt) { room.trade = null; return null; }
+  return room.trade;
+}
+
+function handleTrade(room, p, action) {
+  if (room.phase === 'lobby' || room.phase === 'ended') return fail('现在不能交易');
+  const type = action.type;
+  const trade = currentTrade(room);
+
+  if (type === 'tradeOffer') {
+    if (trade) return fail('已经有一笔交易在处理中');
+    const to = byId(room, action.toId);
+    if (!to || to.bankrupt) return fail('对方不在对局中');
+    if (to.id === p.id) return fail('不能和自己交易');
+    const giveTiles = [...new Set((action.giveTiles || []).map(Number).filter(Number.isInteger))];
+    const getTiles = [...new Set((action.getTiles || []).map(Number).filter(Number.isInteger))];
+    const giveCash = Math.max(0, Math.floor(Number(action.giveCash) || 0));
+    const getCash = Math.max(0, Math.floor(Number(action.getCash) || 0));
+    if (giveCash > p.cash) return fail('你给出的现金不够');
+    if (getCash > to.cash) return fail('对方现金不够');
+    for (const i of giveTiles) {
+      if (!tileOkForTrade(room, i, p.id)) return fail(`${BOARD[i] ? BOARD[i].name : '该地块'} 不能交易（不是你的，或上面有房子）`);
+    }
+    for (const i of getTiles) {
+      if (!tileOkForTrade(room, i, to.id)) return fail(`${BOARD[i] ? BOARD[i].name : '该地块'} 不能交易（不属于对方，或上面有房子）`);
+    }
+    if (!giveTiles.length && !getTiles.length && !giveCash && !getCash) return fail('交易内容为空');
+    room.trade = {
+      id: uid('tr'),
+      fromId: p.id,
+      toId: to.id,
+      give: { cash: giveCash, tiles: giveTiles },
+      get: { cash: getCash, tiles: getTiles },
+      expiresAt: Date.now() + 120000,
+    };
+    pushLog(room, `${p.name} 向 ${to.name} 发起交易：给 ${tradeText(room, room.trade.give)}，换 ${tradeText(room, room.trade.get)}`, 'trade');
+    room.seq++;
+    return ok();
+  }
+
+  if (type === 'tradeAccept') {
+    if (!trade) return fail('交易已失效');
+    if (trade.id !== action.id) return fail('交易已失效');
+    if (trade.toId !== p.id) return fail('这不是发给你的交易');
+    const from = byId(room, trade.fromId);
+    if (!from || from.bankrupt) { room.trade = null; return fail('对方已破产'); }
+    for (const i of trade.give.tiles) if (!tileOkForTrade(room, i, from.id)) return fail('交易内容已变化，请让对方重新发起');
+    for (const i of trade.get.tiles) if (!tileOkForTrade(room, i, p.id)) return fail('交易内容已变化，请让对方重新发起');
+    if (trade.give.cash > from.cash) return fail('对方现金不足');
+    if (trade.get.cash > p.cash) return fail('你的现金不足');
+    for (const i of trade.give.tiles) room.owners[i] = p.id;
+    for (const i of trade.get.tiles) room.owners[i] = from.id;
+    from.cash -= trade.give.cash;
+    p.cash += trade.give.cash;
+    p.cash -= trade.get.cash;
+    from.cash += trade.get.cash;
+    pushLog(room, `交易达成：${from.name} 得到 ${tradeText(room, trade.get)}，${p.name} 得到 ${tradeText(room, trade.give)}`, 'trade');
+    room.trade = null;
+    room.seq++;
+    return ok();
+  }
+
+  if (type === 'tradeReject' || type === 'tradeCancel') {
+    if (!trade || trade.id !== action.id) return fail('交易已失效');
+    const allowed = type === 'tradeReject' ? trade.toId : trade.fromId;
+    if (p.id !== allowed) return fail('你没有权限处理这笔交易');
+    pushLog(room, type === 'tradeReject'
+      ? `${p.name} 拒绝了交易`
+      : `${p.name} 取消了交易`, 'trade');
+    room.trade = null;
+    room.seq++;
+    return ok();
+  }
+
+  return fail('未知的交易操作');
 }
 
 export function startGame(room) {
@@ -314,6 +412,7 @@ function bankrupt(room, p, creditorId) {
   p.inJail = false;
   p.jailTurns = 0;
   p.jailCards = 0;
+  if (room.trade && (room.trade.fromId === p.id || room.trade.toId === p.id)) room.trade = null;
   room.again = false;
   pushLog(room, `${p.name} 破产了！`, 'bankrupt');
   checkEnd(room);
@@ -776,6 +875,8 @@ export function act(room, playerId, action) {
   }
 
   const cur = currentPlayer(room);
+  if (type && type.startsWith('trade')) return handleTrade(room, p, action);
+
   if (!cur || cur.id !== p.id) return fail('还没轮到你');
 
   if (room.phase === 'roll') {
@@ -876,6 +977,7 @@ export function view(room, youId) {
     roundLimit: room.roundLimit,
     pendingBuy: room.pendingBuy,
     lastCard: room.lastCard,
+    trade: currentTrade(room),
     winnerId: room.winnerId,
     finalRank: room.finalRank || null,
     players: room.players.map((p) => ({
