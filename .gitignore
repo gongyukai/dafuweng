@@ -1,0 +1,5 @@
+node_modules/
+shots/
+screenshots/dice.png
+.DS_Store
+*.log

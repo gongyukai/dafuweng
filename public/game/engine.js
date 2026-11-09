@@ -1,0 +1,866 @@
+// 同构规则引擎：Node 服务端和浏览器房主模式共用同一份代码
+import { BOARD, GROUPS, RAIL_TILES, UTIL_TILES } from './board.js';
+import { CHANCE, CHEST, DECK_NAME } from './cards.js';
+
+export const COLORS = ['#e14b4b', '#3d8ee0', '#e5c33c', '#3fae62', '#a165d8', '#e8853a'];
+export const START_CASH = 1500;
+export const GO_SALARY = 200;
+export const JAIL_FINE = 50;
+export const MAX_PLAYERS = 6;
+// 回合上限：防止所有人都不破产导致无限对局，到点按净资产判胜
+export const DEFAULT_ROUND_LIMIT = 50;
+const BOT_NAMES = ['阿福', '小美', '老王', '阿强', '丽丽'];
+
+let seq = 0;
+const uid = (pre) => `${pre}${Date.now().toString(36)}${(seq++).toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
+
+export function shuffle(arr, rng = Math.random) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+const ok = () => ({ ok: true });
+const fail = (err) => ({ ok: false, err });
+
+function pushLog(room, text, kind = 'info') {
+  room.logSeq = (room.logSeq || 0) + 1;
+  room.log.push({ id: room.logSeq, text, kind });
+  if (room.log.length > 120) room.log.splice(0, room.log.length - 120);
+}
+
+function byId(room, id) {
+  return room.players.find((p) => p.id === id) || null;
+}
+
+export function currentPlayer(room) {
+  return room.players[room.turn] || null;
+}
+
+export function alivePlayers(room) {
+  return room.players.filter((p) => !p.bankrupt);
+}
+
+export function createRoom(code) {
+  const room = {
+    code,
+    phase: 'lobby',
+    hostId: null,
+    players: [],
+    owners: {},
+    houses: {},
+    mortgaged: {},
+    turn: 0,
+    dice: [0, 0],
+    again: false,
+    doubles: 0,
+    pendingBuy: null,
+    lastCard: null,
+    winnerId: null,
+    log: [],
+    logSeq: 0,
+    chat: [],
+    chatSeq: 0,
+    seq: 0,
+    chance: [],
+    chest: [],
+    chancePos: 0,
+    chestPos: 0,
+    rng: Math.random,
+    round: 1,
+    roundLimit: DEFAULT_ROUND_LIMIT,
+    createdAt: Date.now(),
+    lastActionAt: Date.now(),
+  };
+  resetDecks(room);
+  return room;
+}
+
+function resetDecks(room) {
+  room.chance = shuffle(CHANCE.map((_, i) => i), room.rng);
+  room.chest = shuffle(CHEST.map((_, i) => i), room.rng);
+  room.chancePos = 0;
+  room.chestPos = 0;
+}
+
+export function resetRoom(room) {
+  room.phase = 'lobby';
+  room.owners = {};
+  room.houses = {};
+  room.mortgaged = {};
+  room.turn = 0;
+  room.round = 1;
+  room.dice = [0, 0];
+  room.again = false;
+  room.doubles = 0;
+  room.pendingBuy = null;
+  room.lastCard = null;
+  room.winnerId = null;
+  room.finalRank = null;
+  room.log = [];
+  room.chat = [];
+  room.logSeq = 0;
+  room.chatSeq = 0;
+  room.seq++;
+  resetDecks(room);
+  for (const p of room.players) {
+    p.cash = START_CASH;
+    p.pos = 0;
+    p.inJail = false;
+    p.jailTurns = 0;
+    p.jailCards = 0;
+    p.bankrupt = false;
+  }
+  pushLog(room, '新的一局开始了，等待房主开局', 'system');
+}
+
+export function addPlayer(room, name, opts = {}) {
+  if (room.phase !== 'lobby') return { ok: false, err: '游戏已经开始，无法加入' };
+  if (room.players.length >= MAX_PLAYERS) return { ok: false, err: '房间已满（最多 6 人）' };
+  const clean = String(name || '').trim().slice(0, 10) || '玩家';
+  const p = {
+    id: uid('p'),
+    token: opts.token || uid('t'),
+    name: clean,
+    color: COLORS[room.players.length % COLORS.length],
+    cash: START_CASH,
+    pos: 0,
+    inJail: false,
+    jailTurns: 0,
+    jailCards: 0,
+    bankrupt: false,
+    isBot: !!opts.isBot,
+    connected: true,
+    isHost: false,
+    joinedAt: Date.now(),
+  };
+  room.players.push(p);
+  if (!room.hostId && !p.isBot) room.hostId = p.id;
+  p.isHost = p.id === room.hostId;
+  room.seq++;
+  pushLog(room, `${p.name} 加入了房间`, 'system');
+  return { ok: true, player: p };
+}
+
+export function removePlayer(room, id) {
+  if (room.phase !== 'lobby') return { ok: false, err: '游戏开始后不能移除玩家' };
+  const idx = room.players.findIndex((p) => p.id === id);
+  if (idx < 0) return { ok: false, err: '玩家不存在' };
+  const p = room.players[idx];
+  if (p.id === room.hostId) return { ok: false, err: '房主不能被移除' };
+  room.players.splice(idx, 1);
+  room.players.forEach((x, i) => { x.color = COLORS[i % COLORS.length]; });
+  room.seq++;
+  pushLog(room, `${p.name} 离开了房间`, 'system');
+  return { ok: true };
+}
+
+export function startGame(room) {
+  if (room.phase !== 'lobby') return { ok: false, err: '游戏已经开始' };
+  if (room.players.length < 2) return { ok: false, err: '至少需要 2 名玩家（可以添加电脑玩家）' };
+  room.phase = 'roll';
+  room.turn = 0;
+  room.round = 1;
+  room.roundLimit = room.roundLimit || DEFAULT_ROUND_LIMIT;
+  room.dice = [0, 0];
+  room.again = false;
+  room.doubles = 0;
+  room.winnerId = null;
+  room.finalRank = null;
+  for (const p of room.players) {
+    p.cash = START_CASH;
+    p.pos = 0;
+    p.inJail = false;
+    p.jailTurns = 0;
+    p.jailCards = 0;
+    p.bankrupt = false;
+  }
+  room.owners = {};
+  room.houses = {};
+  room.mortgaged = {};
+  room.seq++;
+  pushLog(room, `游戏开始，共 ${room.players.length} 位玩家，初始资金 ¥${START_CASH}`, 'system');
+  pushLog(room, `轮到 ${currentPlayer(room).name} 掷骰子`, 'turn');
+  return { ok: true };
+}
+
+// ---------------- 金钱 ----------------
+
+function ownedTiles(room, id) {
+  return Object.keys(room.owners)
+    .filter((k) => room.owners[k] === id)
+    .map(Number);
+}
+
+export function rentFor(room, tileIdx) {
+  const tile = BOARD[tileIdx];
+  const ownerId = room.owners[tileIdx];
+  if (!ownerId || room.mortgaged[tileIdx]) return 0;
+  if (tile.type === 'prop') {
+    const g = GROUPS[tile.group];
+    const houses = room.houses[tileIdx] || 0;
+    if (houses > 0) return tile.rent[Math.min(houses, 5)];
+    const ownsAll = g.tiles.every((i) => room.owners[i] === ownerId);
+    return ownsAll ? tile.rent[0] * 2 : tile.rent[0];
+  }
+  if (tile.type === 'rail') {
+    const n = RAIL_TILES.filter((i) => room.owners[i] === ownerId).length;
+    return [0, 25, 50, 100, 200][n] || 0;
+  }
+  if (tile.type === 'util') {
+    const n = UTIL_TILES.filter((i) => room.owners[i] === ownerId).length;
+    const total = (room.dice[0] || 0) + (room.dice[1] || 0);
+    return total * (n === 2 ? 10 : 4);
+  }
+  return 0;
+}
+
+function sellHouseToBank(room, p, i) {
+  const tile = BOARD[i];
+  if (tile.type !== 'prop') return false;
+  const g = GROUPS[tile.group];
+  const cur = room.houses[i] || 0;
+  if (cur <= 0) return false;
+  const max = Math.max(...g.tiles.map((x) => room.houses[x] || 0));
+  if (cur < max) return false;
+  room.houses[i] = cur - 1;
+  p.cash += Math.floor(g.houseCost / 2);
+  pushLog(room, `${p.name} 卖掉 ${tile.name} 的一栋房子，收回 ¥${Math.floor(g.houseCost / 2)}`, 'build');
+  return true;
+}
+
+function mortgageTile(room, p, i) {
+  const tile = BOARD[i];
+  if (room.owners[i] !== p.id || room.mortgaged[i]) return false;
+  if (tile.type === 'prop' && GROUPS[tile.group].tiles.some((x) => (room.houses[x] || 0) > 0)) return false;
+  room.mortgaged[i] = true;
+  const gain = Math.floor(tile.price / 2);
+  p.cash += gain;
+  pushLog(room, `${p.name} 抵押 ${tile.name}，获得 ¥${gain}`, 'money');
+  return true;
+}
+
+function raiseFunds(room, p, need) {
+  let guard = 0;
+  while (p.cash < need && guard++ < 300) {
+    const cand = ownedTiles(room, p.id)
+      .filter((i) => (room.houses[i] || 0) > 0)
+      .sort((a, b) => (room.houses[b] || 0) - (room.houses[a] || 0));
+    let sold = false;
+    for (const i of cand) { if (sellHouseToBank(room, p, i)) { sold = true; break; } }
+    if (!sold) break;
+  }
+  guard = 0;
+  while (p.cash < need && guard++ < 300) {
+    const cand = ownedTiles(room, p.id).filter((i) => !room.mortgaged[i]);
+    let done = false;
+    for (const i of cand) { if (mortgageTile(room, p, i)) { done = true; break; } }
+    if (!done) break;
+  }
+  if (p.cash < need) {
+    pushLog(room, `${p.name} 变卖资产后仍无法还清债务`, 'bankrupt');
+  }
+}
+
+function bankrupt(room, p, creditorId) {
+  if (p.bankrupt) return;
+  p.bankrupt = true;
+  const creditor = creditorId ? byId(room, creditorId) : null;
+  for (const i of ownedTiles(room, p.id)) {
+    if (creditor && !creditor.bankrupt) {
+      room.owners[i] = creditor.id;
+      room.houses[i] = 0;
+    } else {
+      delete room.owners[i];
+      delete room.houses[i];
+      delete room.mortgaged[i];
+    }
+  }
+  if (creditor && !creditor.bankrupt) {
+    creditor.cash += p.cash;
+    if (p.cash > 0) pushLog(room, `${p.name} 剩余 ¥${p.cash} 交给 ${creditor.name}`, 'money');
+  }
+  p.cash = 0;
+  p.pos = 0;
+  p.inJail = false;
+  p.jailTurns = 0;
+  p.jailCards = 0;
+  room.again = false;
+  pushLog(room, `${p.name} 破产了！`, 'bankrupt');
+  checkEnd(room);
+}
+
+function pay(room, from, amount, toId = null) {
+  if (!from || from.bankrupt || amount <= 0) return 0;
+  if (from.cash < amount) raiseFunds(room, from, amount);
+  const paid = Math.min(from.cash, amount);
+  from.cash -= paid;
+  if (toId) {
+    const to = byId(room, toId);
+    if (to && !to.bankrupt) to.cash += paid;
+  }
+  if (paid < amount) bankrupt(room, from, toId);
+  return paid;
+}
+
+function checkEnd(room) {
+  if (room.phase === 'lobby' || room.phase === 'ended') return;
+  const alive = alivePlayers(room);
+  if (alive.length <= 1) {
+    room.phase = 'ended';
+    room.winnerId = alive[0] ? alive[0].id : null;
+    pushLog(room, alive[0] ? `🏆 ${alive[0].name} 赢得了本局！` : '本局没有胜者', 'system');
+  }
+}
+
+// ---------------- 移动 ----------------
+
+function moveBy(room, p, steps) {
+  if (steps === 0) return;
+  const raw = p.pos + steps;
+  if (raw >= 40) {
+    p.cash += GO_SALARY;
+    pushLog(room, `${p.name} 经过起点，领取 ¥${GO_SALARY}`, 'money');
+  }
+  p.pos = ((raw % 40) + 40) % 40;
+}
+
+function moveToTile(room, p, target) {
+  const steps = (target - p.pos + 40) % 40;
+  if (steps === 0) return;
+  moveBy(room, p, steps);
+}
+
+function goToJail(room, p) {
+  p.pos = 10;
+  p.inJail = true;
+  p.jailTurns = 0;
+  room.again = false;
+  pushLog(room, `${p.name} 被送进监狱`, 'jail');
+}
+
+function drawCard(room, deck) {
+  const arr = deck === 'chance' ? CHANCE : CHEST;
+  const list = deck === 'chance' ? room.chance : room.chest;
+  let pos = deck === 'chance' ? room.chancePos : room.chestPos;
+  if (pos >= list.length) {
+    const reshuffled = shuffle(arr.map((_, i) => i), room.rng);
+    if (deck === 'chance') { room.chance = reshuffled; } else { room.chest = reshuffled; }
+    pos = 0;
+  }
+  const idx = (deck === 'chance' ? room.chance : room.chest)[pos];
+  if (deck === 'chance') room.chancePos = pos + 1; else room.chestPos = pos + 1;
+  return { deck, card: arr[idx] };
+}
+
+function applyCard(room, p, drawn, depth) {
+  const { deck, card } = drawn;
+  room.lastCard = { deck, text: card.text };
+  pushLog(room, `${p.name} 抽到${DECK_NAME[deck]}：${card.text}`, 'card');
+  switch (card.t) {
+    case 'money':
+      if (card.amount >= 0) {
+        p.cash += card.amount;
+        pushLog(room, `${p.name} 获得 ¥${card.amount}`, 'money');
+      } else {
+        pay(room, p, -card.amount, null);
+      }
+      break;
+    case 'move':
+      moveToTile(room, p, card.to);
+      resolveLanding(room, p, depth + 1);
+      break;
+    case 'nearestRail': {
+      const target = RAIL_TILES.find((i) => i > p.pos) ?? RAIL_TILES[0];
+      moveToTile(room, p, target);
+      resolveLanding(room, p, depth + 1);
+      break;
+    }
+    case 'back': {
+      p.pos = ((p.pos - card.n) % 40 + 40) % 40;
+      pushLog(room, `${p.name} 后退到 ${BOARD[p.pos].name}`, 'info');
+      resolveLanding(room, p, depth + 1);
+      break;
+    }
+    case 'jail':
+      goToJail(room, p);
+      break;
+    case 'jailcard':
+      p.jailCards += 1;
+      pushLog(room, `${p.name} 获得一张出狱卡`, 'card');
+      break;
+    case 'repair': {
+      let total = 0;
+      for (const i of ownedTiles(room, p.id)) {
+        const h = room.houses[i] || 0;
+        if (h === 0) continue;
+        total += h >= 5 ? card.hotel : h * card.house;
+      }
+      if (total > 0) {
+        pushLog(room, `${p.name} 需要支付维修费 ¥${total}`, 'money');
+        pay(room, p, total, null);
+      } else {
+        pushLog(room, `${p.name} 没有房产需要维修`, 'info');
+      }
+      break;
+    }
+    case 'payEach': {
+      for (const other of alivePlayers(room)) {
+        if (other.id === p.id || p.bankrupt) continue;
+        pay(room, p, card.amount, other.id);
+      }
+      break;
+    }
+    case 'collectEach': {
+      for (const other of alivePlayers(room)) {
+        if (other.id === p.id) continue;
+        pay(room, other, card.amount, p.id);
+      }
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+function resolveLanding(room, p, depth = 0) {
+  if (!p || p.bankrupt || depth > 4) return;
+  const tile = BOARD[p.pos];
+  switch (tile.type) {
+    case 'prop':
+    case 'rail':
+    case 'util': {
+      const ownerId = room.owners[tile.i];
+      if (!ownerId) {
+        room.pendingBuy = tile.i;
+        pushLog(room, `${p.name} 到达 ${tile.name}（售价 ¥${tile.price}），可以购买`, 'buy');
+      } else if (ownerId === p.id) {
+        pushLog(room, `${p.name} 回到自己的 ${tile.name}`, 'info');
+      } else if (room.mortgaged[tile.i]) {
+        pushLog(room, `${tile.name} 处于抵押状态，免租`, 'info');
+      } else {
+        const owner = byId(room, ownerId);
+        const rent = rentFor(room, tile.i);
+        pushLog(room, `${p.name} 踩到 ${owner.name} 的 ${tile.name}，支付租金 ¥${rent}`, 'rent');
+        pay(room, p, rent, ownerId);
+      }
+      break;
+    }
+    case 'tax':
+      pushLog(room, `${p.name} 缴纳${tile.name} ¥${tile.amount}`, 'money');
+      pay(room, p, tile.amount, null);
+      break;
+    case 'chance':
+    case 'chest':
+      applyCard(room, p, drawCard(room, tile.type), depth);
+      break;
+    case 'gotojail':
+      goToJail(room, p);
+      break;
+    case 'jail':
+      pushLog(room, `${p.name} 只是来探监`, 'info');
+      break;
+    case 'parking':
+      pushLog(room, `${p.name} 在免费停车场休息`, 'info');
+      break;
+    default:
+      break;
+  }
+}
+
+function nextTurn(room) {
+  if (room.phase === 'ended') return;
+  const n = room.players.length;
+  const prev = room.turn;
+  for (let k = 1; k <= n; k++) {
+    const i = (prev + k) % n;
+    const p = room.players[i];
+    if (!p.bankrupt) {
+      if (i <= prev) room.round += 1;
+      room.turn = i;
+      room.phase = 'roll';
+      room.dice = [0, 0];
+      room.again = false;
+      room.doubles = 0;
+      room.pendingBuy = null;
+      room.lastCard = null;
+      if (room.round > room.roundLimit) {
+        settleByNetWorth(room);
+        return;
+      }
+      pushLog(room, `第 ${room.round} 回合 · 轮到 ${p.name}`, 'turn');
+      return;
+    }
+  }
+  checkEnd(room);
+}
+
+export function netWorth(room, p) {
+  let v = p.cash;
+  for (const i of ownedTiles(room, p.id)) {
+    const tile = BOARD[i];
+    v += room.mortgaged[i] ? Math.floor(tile.price / 2) : tile.price;
+    if (tile.type === 'prop') v += (room.houses[i] || 0) * GROUPS[tile.group].houseCost;
+  }
+  return v;
+}
+
+function settleByNetWorth(room) {
+  const alive = alivePlayers(room);
+  if (!alive.length) { checkEnd(room); return; }
+  const ranked = alive
+    .map((p) => ({ p, v: netWorth(room, p) }))
+    .sort((a, b) => b.v - a.v);
+  room.phase = 'ended';
+  room.winnerId = ranked[0].p.id;
+  room.finalRank = ranked.map(({ p, v }) => ({ id: p.id, name: p.name, worth: v }));
+  pushLog(room, `达到 ${room.roundLimit} 回合上限，按净资产结算：`, 'system');
+  for (const { p, v } of ranked) pushLog(room, `${p.name} 净资产 ¥${v}`, 'info');
+  pushLog(room, `🏆 ${ranked[0].p.name} 以 ¥${ranked[0].v} 获胜`, 'system');
+}
+
+// ---------------- 动作 ----------------
+
+function doRoll(room) {
+  const p = currentPlayer(room);
+  const d1 = 1 + Math.floor(room.rng() * 6);
+  const d2 = 1 + Math.floor(room.rng() * 6);
+  room.dice = [d1, d2];
+  const total = d1 + d2;
+  const dbl = d1 === d2;
+  pushLog(room, `${p.name} 掷出 ${d1} + ${d2}${dbl ? '，双数！' : ''}`, 'dice');
+
+  if (p.inJail) {
+    if (dbl) {
+      p.inJail = false;
+      p.jailTurns = 0;
+      pushLog(room, `${p.name} 掷出双数，成功出狱`, 'jail');
+      moveBy(room, p, total);
+      resolveLanding(room, p);
+      room.phase = room.pendingBuy != null ? 'buy' : 'end';
+    } else {
+      p.jailTurns += 1;
+      if (p.jailTurns >= 3) {
+        pushLog(room, `${p.name} 三次未掷出双数，缴纳 ¥${JAIL_FINE} 保释金`, 'jail');
+        pay(room, p, JAIL_FINE, null);
+        if (!p.bankrupt && room.phase !== 'ended') {
+          p.inJail = false;
+          p.jailTurns = 0;
+          moveBy(room, p, total);
+          resolveLanding(room, p);
+        }
+        room.phase = room.phase === 'ended' ? 'ended' : room.pendingBuy != null ? 'buy' : 'end';
+      } else {
+        pushLog(room, `${p.name} 仍在监狱（第 ${p.jailTurns} 回合）`, 'jail');
+        room.phase = 'end';
+      }
+    }
+    room.again = false;
+    return;
+  }
+
+  room.doubles = dbl ? room.doubles + 1 : 0;
+  if (dbl && room.doubles >= 3) {
+    pushLog(room, `${p.name} 连续三次双数，直接入狱`, 'jail');
+    goToJail(room, p);
+    room.phase = 'end';
+    return;
+  }
+  room.again = dbl;
+  moveBy(room, p, total);
+  resolveLanding(room, p);
+  if (room.phase === 'ended') return;
+  room.phase = room.pendingBuy != null ? 'buy' : room.again && !p.inJail ? 'roll' : 'end';
+}
+
+function doBuy(room, p) {
+  if (room.pendingBuy == null) return fail('现在没有可购买的地产');
+  const tile = BOARD[room.pendingBuy];
+  if (p.cash < tile.price) return fail('现金不足，无法购买');
+  p.cash -= tile.price;
+  room.owners[tile.i] = p.id;
+  room.houses[tile.i] = 0;
+  pushLog(room, `${p.name} 买下了 ${tile.name}（¥${tile.price}）`, 'buy');
+  room.pendingBuy = null;
+  room.phase = room.again ? 'roll' : 'end';
+  return ok();
+}
+
+function doPass(room, p) {
+  if (room.pendingBuy == null) return fail('现在没有待购买的地产');
+  const tile = BOARD[room.pendingBuy];
+  pushLog(room, `${p.name} 放弃购买 ${tile.name}`, 'info');
+  room.pendingBuy = null;
+  room.phase = room.again ? 'roll' : 'end';
+  return ok();
+}
+
+function doEnd(room) {
+  if (room.pendingBuy != null) return fail('请先决定是否购买');
+  room.phase = 'end';
+  nextTurn(room);
+  return ok();
+}
+
+function doBail(room, p) {
+  if (!p.inJail) return fail('你不在监狱里');
+  if (p.cash < JAIL_FINE) return fail('现金不足，付不起保释金');
+  p.cash -= JAIL_FINE;
+  p.inJail = false;
+  p.jailTurns = 0;
+  pushLog(room, `${p.name} 支付 ¥${JAIL_FINE} 保释金出狱`, 'jail');
+  return ok();
+}
+
+function doJailCard(room, p) {
+  if (!p.inJail) return fail('你不在监狱里');
+  if (p.jailCards <= 0) return fail('你没有出狱卡');
+  p.jailCards -= 1;
+  p.inJail = false;
+  p.jailTurns = 0;
+  pushLog(room, `${p.name} 使用出狱卡出狱`, 'jail');
+  return ok();
+}
+
+function doBuild(room, p, i) {
+  const tile = BOARD[i];
+  if (!tile || tile.type !== 'prop') return fail('只能在地产上盖房');
+  if (room.owners[i] !== p.id) return fail('这不是你的地');
+  const g = GROUPS[tile.group];
+  if (!g.tiles.every((x) => room.owners[x] === p.id)) return fail('需要集齐同色地块才能盖房');
+  if (g.tiles.some((x) => room.mortgaged[x])) return fail('该组有地块处于抵押状态');
+  const cur = room.houses[i] || 0;
+  if (cur >= 5) return fail('已经建满旅馆');
+  const min = Math.min(...g.tiles.map((x) => room.houses[x] || 0));
+  if (cur > min) return fail('必须均衡建造（先补齐房子少的）');
+  if (p.cash < g.houseCost) return fail(`现金不足，需要 ¥${g.houseCost}`);
+  p.cash -= g.houseCost;
+  room.houses[i] = cur + 1;
+  pushLog(room, `${p.name} 在 ${tile.name} ${cur + 1 === 5 ? '建起了旅馆' : `盖了第 ${cur + 1} 栋房子`}（-¥${g.houseCost}）`, 'build');
+  return ok();
+}
+
+function doSellHouse(room, p, i) {
+  const tile = BOARD[i];
+  if (!tile || tile.type !== 'prop') return fail('这不是地产');
+  if (room.owners[i] !== p.id) return fail('这不是你的地');
+  const g = GROUPS[tile.group];
+  const cur = room.houses[i] || 0;
+  if (cur <= 0) return fail('这里没有房子可卖');
+  const max = Math.max(...g.tiles.map((x) => room.houses[x] || 0));
+  if (cur < max) return fail('必须均衡出售（先卖房子多的）');
+  room.houses[i] = cur - 1;
+  p.cash += Math.floor(g.houseCost / 2);
+  pushLog(room, `${p.name} 卖掉 ${tile.name} 的一栋房子（+¥${Math.floor(g.houseCost / 2)}）`, 'build');
+  return ok();
+}
+
+function doMortgage(room, p, i) {
+  const tile = BOARD[i];
+  if (!tile) return fail('格子不存在');
+  if (room.owners[i] !== p.id) return fail('这不是你的地');
+  if (room.mortgaged[i]) return fail('已经抵押过了');
+  if (tile.type === 'prop' && GROUPS[tile.group].tiles.some((x) => (room.houses[x] || 0) > 0)) {
+    return fail('请先卖掉该组的所有房子');
+  }
+  mortgageTile(room, p, i);
+  return ok();
+}
+
+function doUnmortgage(room, p, i) {
+  const tile = BOARD[i];
+  if (!tile) return fail('格子不存在');
+  if (room.owners[i] !== p.id) return fail('这不是你的地');
+  if (!room.mortgaged[i]) return fail('这块地没有抵押');
+  const cost = Math.ceil(tile.price * 0.55);
+  if (p.cash < cost) return fail(`赎回需要 ¥${cost}，现金不足`);
+  p.cash -= cost;
+  room.mortgaged[i] = false;
+  pushLog(room, `${p.name} 赎回 ${tile.name}（-¥${cost}）`, 'money');
+  return ok();
+}
+
+function normalize(room) {
+  if (room.phase === 'ended' || room.phase === 'lobby') return;
+  const cur = currentPlayer(room);
+  if (!cur || cur.bankrupt) {
+    if (alivePlayers(room).length <= 1) { checkEnd(room); return; }
+    nextTurn(room);
+  }
+}
+
+const BUILD_ACTIONS = new Set(['build', 'sellHouse', 'mortgage', 'unmortgage']);
+
+export function act(room, playerId, action) {
+  const p = byId(room, playerId);
+  if (!p) return fail('玩家不存在');
+  const type = action && action.type;
+  room.lastActionAt = Date.now();
+
+  if (type === 'chat') {
+    const text = String(action.text || '').trim().slice(0, 120);
+    if (!text) return fail('消息为空');
+    room.chatSeq += 1;
+    room.chat.push({ id: room.chatSeq, from: p.id, name: p.name, text, t: Date.now() });
+    if (room.chat.length > 60) room.chat.splice(0, room.chat.length - 60);
+    room.seq++;
+    return ok();
+  }
+
+  if (room.phase === 'lobby') {
+    if (type === 'start') {
+      if (p.id !== room.hostId) return fail('只有房主能开始游戏');
+      return startGame(room);
+    }
+    if (type === 'addBot') {
+      if (p.id !== room.hostId) return fail('只有房主能添加电脑玩家');
+      const used = new Set(room.players.map((x) => x.name));
+      const name = BOT_NAMES.find((n) => !used.has(n)) || `电脑${room.players.length}`;
+      return addPlayer(room, name, { isBot: true });
+    }
+    if (type === 'removeBot') {
+      if (p.id !== room.hostId) return fail('只有房主能移除电脑玩家');
+      const target = byId(room, action.id);
+      if (!target || !target.isBot) return fail('只能移除电脑玩家');
+      return removePlayer(room, target.id);
+    }
+    return fail('游戏还没有开始');
+  }
+
+  if (room.phase === 'ended') {
+    if (type === 'restart') {
+      if (p.id !== room.hostId) return fail('只有房主能重开一局');
+      resetRoom(room);
+      return ok();
+    }
+    return fail('本局已经结束');
+  }
+
+  const cur = currentPlayer(room);
+  if (!cur || cur.id !== p.id) return fail('还没轮到你');
+
+  if (room.phase === 'roll') {
+    if (type === 'roll') { doRoll(room); normalize(room); room.seq++; return ok(); }
+    if (type === 'bail') { const r = doBail(room, p); if (r.ok) room.seq++; return r; }
+    if (type === 'jailcard') { const r = doJailCard(room, p); if (r.ok) room.seq++; return r; }
+  }
+  if (room.phase === 'buy') {
+    if (type === 'buy') { const r = doBuy(room, p); if (r.ok) room.seq++; return r; }
+    if (type === 'pass') { doPass(room, p); normalize(room); room.seq++; return ok(); }
+  }
+  if (room.phase === 'end' && type === 'end') {
+    doEnd(room);
+    normalize(room);
+    room.seq++;
+    return ok();
+  }
+  if (BUILD_ACTIONS.has(type)) {
+    let r;
+    if (type === 'build') r = doBuild(room, p, action.i);
+    else if (type === 'sellHouse') r = doSellHouse(room, p, action.i);
+    else if (type === 'mortgage') r = doMortgage(room, p, action.i);
+    else r = doUnmortgage(room, p, action.i);
+    if (r.ok) { normalize(room); room.seq++; }
+    return r;
+  }
+  return fail('当前阶段不能做这个操作');
+}
+
+// ---------------- 机器人 ----------------
+
+function botBuild(room, p) {
+  const groups = Object.keys(GROUPS)
+    .filter((g) => GROUPS[g].tiles.every((i) => room.owners[i] === p.id))
+    .filter((g) => GROUPS[g].tiles.every((i) => !room.mortgaged[i]));
+  for (const g of groups) {
+    const cost = GROUPS[g].houseCost;
+    if (p.cash - cost < 250) continue;
+    const tiles = GROUPS[g].tiles
+      .map((i) => ({ i, h: room.houses[i] || 0 }))
+      .sort((a, b) => a.h - b.h);
+    const target = tiles.find((t) => t.h < 5);
+    if (target) return target.i;
+  }
+  return -1;
+}
+
+export function tickBots(room) {
+  if (room.phase === 'lobby' || room.phase === 'ended') return false;
+  const p = currentPlayer(room);
+  if (!p || !p.isBot || p.bankrupt) return false;
+  const rng = room.rng;
+  if (room.phase === 'roll') {
+    if (p.inJail) {
+      if (p.jailCards > 0) return act(room, p.id, { type: 'jailcard' }).ok;
+      if (p.cash > 250) { const r = act(room, p.id, { type: 'bail' }); if (r.ok) return true; }
+    }
+    return act(room, p.id, { type: 'roll' }).ok;
+  }
+  if (room.phase === 'buy') {
+    const tile = BOARD[room.pendingBuy];
+    if (!tile) return false;
+    const g = tile.group ? GROUPS[tile.group] : null;
+    const completes = g ? g.tiles.every((i) => room.owners[i] === p.id || i === tile.i) : false;
+    const affordable = p.cash - tile.price >= 100;
+    const buy = affordable && (completes || rng() > 0.15);
+    const r = act(room, p.id, { type: buy ? 'buy' : 'pass' });
+    if (r.ok) return true;
+    return act(room, p.id, { type: 'pass' }).ok;
+  }
+  if (room.phase === 'end') {
+    const i = botBuild(room, p);
+    if (i >= 0 && rng() > 0.25) {
+      const r = act(room, p.id, { type: 'build', i });
+      if (r.ok) return true;
+    }
+    const r = act(room, p.id, { type: 'end' });
+    if (r.ok) return true;
+    return false;
+  }
+  return false;
+}
+
+// ---------------- 视图 ----------------
+
+export function view(room, youId) {
+  const cur = currentPlayer(room);
+  return {
+    code: room.code,
+    phase: room.phase,
+    hostId: room.hostId,
+    turnId: room.phase === 'lobby' || room.phase === 'ended' ? null : cur ? cur.id : null,
+    you: youId || null,
+    dice: room.dice,
+    again: room.again,
+    doubles: room.doubles,
+    round: room.round,
+    roundLimit: room.roundLimit,
+    pendingBuy: room.pendingBuy,
+    lastCard: room.lastCard,
+    winnerId: room.winnerId,
+    finalRank: room.finalRank || null,
+    players: room.players.map((p) => ({
+      id: p.id,
+      name: p.name,
+      color: p.color,
+      cash: p.cash,
+      pos: p.pos,
+      inJail: p.inJail,
+      jailTurns: p.jailTurns,
+      jailCards: p.jailCards,
+      bankrupt: p.bankrupt,
+      isBot: p.isBot,
+      connected: p.connected,
+      isHost: p.id === room.hostId,
+    })),
+    owners: room.owners,
+    houses: room.houses,
+    mortgaged: room.mortgaged,
+    log: room.log.slice(-60),
+    chat: room.chat.slice(-40),
+    seq: room.seq,
+  };
+}

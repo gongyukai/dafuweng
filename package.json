@@ -1,0 +1,17 @@
+{
+  "name": "dafuweng-cn",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "中国城市版大富翁 · 多人联机（Node/SSE 与 WebRTC 房主模式）",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node test/rules.mjs && node test/sim.mjs 100",
+    "sim": "node test/sim.mjs",
+    "e2e": "node test/e2e.mjs",
+    "pages": "node scripts/make-pages.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
