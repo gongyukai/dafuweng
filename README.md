@@ -2,6 +2,8 @@
 
 一个能 2–6 人实时联机的经典大富翁网页游戏：40 格中国城市棋盘、买地盖房、机会命运、抵押贷款、监狱、破产淘汰，50 回合按净资产结算。
 
+**在线试玩：<https://gongyukai.github.io/dafuweng/>**（GitHub Pages，WebRTC 房主模式）
+
 **零第三方依赖**（纯 Node + 原生前端），既可以在自己电脑上跑服务器，也能直接丢到 GitHub Pages 上用 WebRTC 联机。
 
 ![游戏界面](screenshots/board.png)
@@ -71,6 +73,17 @@ git add docs && git commit -m "build pages" && git push
 然后在 **Settings → Pages → Source** 选 **Deploy from a branch → main → /docs**。
 
 部署完把页面链接发给朋友，他们打开后输入房间码（或直接点你复制的邀请链接）就能加入。
+
+**当前仓库已经部署好**：<https://gongyukai.github.io/dafuweng/>（仓库 `gongyukai/dafuweng`，public）。
+
+如果 `github.com:443` 连不上（国内常见），`git push` 会失败，可以改用 API 推送：
+
+```powershell
+$env:GH_TOKEN = "<你的 GitHub token>"
+node scripts/api-push.mjs gongyukai dafuweng "更新说明"
+```
+
+等 `github.com` 恢复后，再 `git fetch origin && git reset --hard origin/main` 把本地历史对齐。
 
 ### Pages 模式的限制（说清楚，免得踩坑）
 

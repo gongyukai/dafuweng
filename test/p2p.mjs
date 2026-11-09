@@ -60,13 +60,14 @@ class Page {
 function assert(c, m) { if (!c) throw new Error('断言失败：' + m); }
 
 const list = await (await fetch(`${CDP}/json/list`)).json();
-let pages = list.filter((t) => t.type === 'page' && t.url.includes('3211'));
+const MATCH = process.env.MATCH || '3211';
+let pages = list.filter((t) => t.type === 'page' && t.url.includes(MATCH));
 if (pages.length < 2) {
   // headless 启动时只接受一个页面，这里再开一个标签页
   await fetch(`${CDP}/json/new?${encodeURIComponent(`${BASE}/`)}`, { method: 'PUT' });
   await sleep(800);
   const list2 = await (await fetch(`${CDP}/json/list`)).json();
-  pages = list2.filter((t) => t.type === 'page' && t.url.includes('3211'));
+  pages = list2.filter((t) => t.type === 'page' && t.url.includes(MATCH));
 }
 if (pages.length < 2) throw new Error(`需要 2 个页面，实际 ${pages.length}`);
 
@@ -130,3 +131,4 @@ if (errors.length) {
 }
 console.log('\n🎉 P2P（房主模式）联机测试全部通过');
 process.exit(0);
+
