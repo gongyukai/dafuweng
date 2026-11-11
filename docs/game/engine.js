@@ -42,10 +42,10 @@ export const MISSION_MIN_ROUND = 5;
 
 export const MISSIONS = [
   { id: 'monopoly', text: '集齐任意一组同色地块' },
-  { id: 'cash', text: '现金达到 ¥3000' },
+  { id: 'cash', text: '现金达到 ¥2200' },
   { id: 'lands', text: '拥有 8 块地产' },
   { id: 'houses', text: '建成 3 栋房子' },
-  { id: 'rails', text: '拥有 2 个车站' },
+  { id: 'rails', text: '拥有 3 个车站' },
 ];
 
 export const ITEMS = {
@@ -186,6 +186,7 @@ export function resetRoom(room) {
     p.items = [];
     p.shield = false;
     p.mission = null;
+    p.missionDone = false;
     p.forcedDice = 0;
   }
   pushLog(room, '新的一局开始了，等待房主开局', 'system');
@@ -213,6 +214,7 @@ export function addPlayer(room, name, opts = {}) {
     items: [],
     shield: false,
     mission: null,
+    missionDone: false,
     persona: opts.persona || (opts.isBot ? PERSONA_IDS[Math.floor(Math.random() * PERSONA_IDS.length)] : null),
     joinedAt: Date.now(),
   };
@@ -361,6 +363,7 @@ export function startGame(room) {
     p.items = [];
     p.shield = false;
     p.forcedDice = 0;
+    p.missionDone = false;
   }
   room.owners = {};
   room.houses = {};
@@ -503,6 +506,7 @@ function checkEnd(room) {
   if (alive.length <= 1) {
     room.phase = 'ended';
     room.winnerId = alive[0] ? alive[0].id : null;
+    finalizeRanking(room);
     pushLog(room, alive[0] ? `🏆 ${alive[0].name} 赢得了本局！` : '本局没有胜者', 'system');
   }
 }
@@ -772,13 +776,13 @@ function missionMet(room, p) {
     case 'monopoly':
       return Object.keys(GROUPS).some((g) => GROUPS[g].tiles.every((i) => room.owners[i] === p.id));
     case 'cash':
-      return p.cash >= 3000;
+      return p.cash >= 2200;
     case 'lands':
       return tiles.length >= 8;
     case 'houses':
       return tiles.reduce((s, i) => s + (room.houses[i] || 0), 0) >= 3;
     case 'rails':
-      return RAIL_TILES.filter((i) => room.owners[i] === p.id).length >= 2;
+      return RAIL_TILES.filter((i) => room.owners[i] === p.id).length >= 3;
     default:
       return false;
   }
@@ -786,18 +790,28 @@ function missionMet(room, p) {
 
 function checkMissions(room) {
   if (room.phase === 'lobby' || room.phase === 'ended') return;
-  if (room.round < MISSION_MIN_ROUND) return;
   for (const p of room.players) {
-    if (p.bankrupt || !p.mission) continue;
+    if (p.bankrupt || !p.mission || p.missionDone) continue;
     if (!missionMet(room, p)) continue;
-    room.phase = 'ended';
-    room.winnerId = p.id;
-    room.missionWin = p.id;
-    room.pendingBuy = null;
+    p.missionDone = true;
     const text = (MISSIONS.find((m) => m.id === p.mission) || {}).text || '';
-    pushLog(room, `🎯 ${p.name} 完成秘密任务「${text}」，直接获胜！`, 'system');
-    return;
+    pushLog(room, `🎯 ${p.name} 完成了秘密任务「${text}」，结算时净资产 +20%`, 'system');
   }
+}
+
+// 结算时把秘密任务加成算进去
+export function finalWorth(room, p) {
+  const base = netWorth(room, p);
+  return p.missionDone ? Math.round(base * 1.2) : base;
+}
+
+function finalizeRanking(room) {
+  const ranked = room.players
+    .filter((p) => !p.bankrupt)
+    .map((p) => ({ id: p.id, name: p.name, worth: finalWorth(room, p), missionDone: !!p.missionDone }))
+    .sort((a, b) => b.worth - a.worth);
+  room.finalRank = ranked;
+  return ranked;
 }
 
 function nextTurn(room) {  if (room.phase === 'ended') return;
@@ -845,13 +859,16 @@ function settleByNetWorth(room) {
   const alive = alivePlayers(room);
   if (!alive.length) { checkEnd(room); return; }
   const ranked = alive
-    .map((p) => ({ p, v: netWorth(room, p) }))
+    .map((p) => ({ p, v: finalWorth(room, p) }))
     .sort((a, b) => b.v - a.v);
   room.phase = 'ended';
   room.winnerId = ranked[0].p.id;
-  room.finalRank = ranked.map(({ p, v }) => ({ id: p.id, name: p.name, worth: v }));
-  pushLog(room, `达到 ${room.roundLimit} 回合上限，按净资产结算：`, 'system');
-  for (const { p, v } of ranked) pushLog(room, `${p.name} 净资产 ¥${v}`, 'info');
+  room.missionWin = null;
+  finalizeRanking(room);
+  pushLog(room, `达到 ${room.roundLimit} 回合上限，按净资产结算（秘密任务 +20%）：`, 'system');
+  for (const { p, v } of ranked) {
+    pushLog(room, `${p.name} 净资产 ¥${v}${p.missionDone ? '（含任务加成）' : ''}`, 'info');
+  }
   pushLog(room, `🏆 ${ranked[0].p.name} 以 ¥${ranked[0].v} 获胜`, 'system');
 }
 
@@ -1305,6 +1322,7 @@ export function view(room, youId) {
       items: p.id === youId ? (p.items || []) : [],
       itemCount: (p.items || []).length,
       mission: (p.id === youId || room.phase === 'ended') ? p.mission : null,
+      missionDone: !!p.missionDone,
     })),
     owners: room.owners,
     houses: room.houses,

@@ -819,7 +819,10 @@ button, input { font: inherit; color: inherit; }
 .mc-body { flex: 1; min-width: 0; }
 .mc-body b { display: block; font-size: 11px; color: var(--gold); letter-spacing: 1px; }
 .mc-body span { font-size: 13px; color: var(--text); }
-.mission-card em { font-style: normal; font-size: 10px; color: var(--muted); text-align: right; max-width: 88px; }
+.mission-card em { font-style: normal; font-size: 10px; color: var(--muted); text-align: right; max-width: 92px; }
+.mission-card.done { border-color: rgba(126, 240, 168, 0.5); background: rgba(126, 240, 168, 0.08); }
+.mission-card.done .mc-ico { color: #7ef0a8; }
+.mission-card.done em { color: #7ef0a8; }
 
 .items-bar { margin-bottom: 8px; }
 .items-head { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-bottom: 5px; }

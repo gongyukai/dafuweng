@@ -39,10 +39,11 @@ console.log('\n秘密任务分配与可见性');
   expect(v0.players[1].mission === null, '看不到别人的任务');
 }
 
-console.log('\n任务达成即胜');
+console.log('\n任务达成改为结算加成');
 {
   const { room, players } = makeGame(3);
   room.round = 5;
+  room.lastEventRound = 5; // 跳过全场事件，避免现金被扣
   players.forEach((p) => { p.mission = 'lands'; });
   players[0].mission = 'cash';
   players[0].cash = 3200;
@@ -50,22 +51,44 @@ console.log('\n任务达成即胜');
   room.phase = 'end';
   const r = act(room, players[0].id, { type: 'end' });
   expect(r.ok, '结束回合正常');
-  expect(room.phase === 'ended', '游戏结束');
-  expect(room.winnerId === players[0].id, '达成任务的人获胜');
-  expect(room.missionWin === players[0].id, '标记为任务胜利');
-  const vEnd = view(room, players[1].id);
-  expect(vEnd.players.every((p) => p.mission), '结束时公开所有人的任务');
+  expect(room.phase !== 'ended', '任务达成不会提前结束对局');
+  expect(players[0].missionDone === true, '任务标记为已完成');
+  const v = view(room, players[1].id);
+  expect(v.players.find((p) => p.id === players[0].id).missionDone === true, '其他人能看到任务已完成');
+}
+
+console.log('\n结算时任务加 20%');
+{
+  const { room, players } = makeGame(3);
+  players[0].mission = 'cash';
+  players[0].missionDone = true;
+  players[0].cash = 3000;
+  players[1].cash = 1000;
+  players[2].cash = 1000;
+  room.owners = {};
+  room.houses = {};
+  room.mortgaged = {};
+  room.round = 50;
+  room.roundLimit = 50;
+  room.turn = 2;
+  room.phase = 'end';
+  room.pendingBuy = null;
+  act(room, players[2].id, { type: 'end' });
+  expect(room.phase === 'ended', '达到回合上限结算');
+  const rank = room.finalRank;
+  expect(rank[0].id === players[0].id, '任务完成者胜出');
+  expect(rank[0].worth === 3600, `净资产含 20% 加成（实际 ${rank[0].worth}）`);
 }
 
 console.log('\n任务未达成不会误判');
 {
   const { room, players } = makeGame(2);
-  room.round = 5;
+  room.round = 8;
   players[0].mission = 'lands';
   room.phase = 'end';
   room.turn = 0;
   act(room, players[0].id, { type: 'end' });
-  expect(room.phase !== 'ended' || room.winnerId !== players[0].id, '没凑够地产不会获胜');
+  expect(players[0].missionDone !== true, '没凑够地产不会标记完成');
 }
 
 console.log('\n道具：经过起点获得');

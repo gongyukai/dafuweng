@@ -640,15 +640,28 @@ function actionLobby(v, isHost, me) {
     ${bots.length ? `<div class="mini-list">${bots.map((b) => `<div class="mini-row"><img src="${icon(pieceOf(b.piece).file)}" alt=""><span>${esc(b.name)}</span><button class="btn tiny" data-act="removeBot" data-id="${b.id}">移除</button></div>`).join('')}</div>` : ''}`;
 }
 
+function missionProgress(v, me) {
+  const mine = Object.keys(v.owners).filter((i) => v.owners[i] === me.id).map(Number);
+  switch (me.mission) {
+    case 'lands': return `${mine.length}/8`;
+    case 'houses': return `${mine.reduce((s, i) => s + (v.houses[i] || 0), 0)}/3`;
+    case 'rails': return `${mine.filter((i) => BOARD[i].type === 'rail').length}/3`;
+    case 'cash': return `¥${fmt(me.cash)}/2200`;
+    case 'monopoly': {
+      const done = Object.keys(GROUPS).filter((g) => GROUPS[g].tiles.every((i) => v.owners[i] === me.id)).length;
+      return `${done}/1 组`;
+    }
+    default: return '';
+  }
+}
+
 function missionCardHTML(v, me) {
   if (!me || !me.mission) return '';
   const text = MISSION_TEXT[me.mission] || me.mission;
-  const minRound = v.missionMinRound || 5;
-  const locked = v.round < minRound;
-  return `<div class="mission-card">
+  return `<div class="mission-card${me.missionDone ? ' done' : ''}">
     <span class="mc-ico">${mi('assets/ui/bullseye.svg')}</span>
     <div class="mc-body"><b>秘密任务</b><span>${esc(text)}</span></div>
-    <em>${locked ? `第 ${minRound} 回合起可达成` : '已生效'}</em>
+    <em>${me.missionDone ? '已完成 · 结算 +20%' : missionProgress(v, me)}</em>
   </div>`;
 }
 
@@ -673,15 +686,15 @@ function actionEnded(v, isHost) {
     ? v.finalRank
     : [...v.players].sort((a, b) => b.cash - a.cash).map((p) => ({ id: p.id, name: p.name, worth: p.cash }));
   const winnerWorth = rank.find((r) => r.id === v.winnerId);
-  const byMission = v.missionWin && v.missionWin === v.winnerId;
   return `<div class="over-card">
     <img class="trophy" src="${icon('1f3c6.svg')}" alt="">
     <h2>${esc(winner ? winner.name : '—')} 获胜</h2>
-    <p class="win">${byMission ? '完成秘密任务' : winnerWorth ? `净资产 ¥${fmt(winnerWorth.worth)}` : ''}</p>
+    <p class="win">${winnerWorth ? `净资产 ¥${fmt(winnerWorth.worth)}` : ''}</p>
     <table>${rank.map((r) => {
       const p = v.players.find((x) => x.id === r.id);
       const m = p && p.mission ? MISSION_TEXT[p.mission] : '';
-      return `<tr><td>${esc(r.name)}${m ? `<br><small class="mission-line">任务：${esc(m)}</small>` : ''}</td><td>¥${fmt(r.worth)}</td></tr>`;
+      const bonus = r.missionDone ? ' · 已完成 +20%' : '';
+      return `<tr><td>${esc(r.name)}${m ? `<br><small class="mission-line">任务：${esc(m)}${bonus}</small>` : ''}</td><td>¥${fmt(r.worth)}</td></tr>`;
     }).join('')}</table>
     ${isHost
       ? '<button class="btn primary big wide" data-act="restart">再来一局</button>'
