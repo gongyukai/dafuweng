@@ -17,6 +17,8 @@ export const CHANCE = [
   { t: 'payEach', amount: 50, text: '当选董事长，向每位玩家支付 ¥50' },
   { t: 'money', amount: 150, text: '建筑贷款到期，收入 ¥150' },
   { t: 'move', to: 19, text: '前进到南昌' },
+  { t: 'item', text: '获得一张随机道具卡' },
+  { t: 'item', text: '获得一张随机道具卡' },
 ];
 
 export const CHEST = [
@@ -35,6 +37,7 @@ export const CHEST = [
   { t: 'money', amount: -25, text: '支付咨询费 ¥25' },
   { t: 'repair', house: 40, hotel: 115, text: '街道整修：每栋房子 ¥40，每座旅馆 ¥115' },
   { t: 'money', amount: 10, text: '选美比赛二等奖，收入 ¥10' },
+  { t: 'item', text: '获得一张随机道具卡' },
 ];
 
 export const DECK_NAME = { chance: '机会', chest: '命运' };

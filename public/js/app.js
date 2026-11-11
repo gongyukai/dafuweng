@@ -1,5 +1,5 @@
 import { BOARD, GROUPS, sideOf, gridPos } from '../game/board.js';
-import { PIECES, pieceOf } from '../game/engine.js';
+import { PIECES, pieceOf, PERSONAS, MISSIONS, ITEMS, EVENTS } from '../game/engine.js';
 import {
   HttpNet, HostNet, GuestNet, LocalNet, loadSession, saveSession, detectServer,
 } from './net.js';
@@ -27,11 +27,29 @@ const S = {
   lastCash: new Map(),
   ready: false,
   trade: null,
+  itemPending: null,
 };
 
 const PIPS = {
   1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8],
 };
+
+const MISSION_TEXT = Object.fromEntries(MISSIONS.map((m) => [m.id, m.text]));
+const EVENT_TEXT = Object.fromEntries(EVENTS.map((e) => [e.id, e]));
+const ITEM_ICON = {
+  dice: 'assets/ui/dice-d6.svg',
+  shield: 'assets/ui/shield-halved.svg',
+  demolish: 'assets/ui/hammer.svg',
+  equalize: 'assets/ui/scale-balanced.svg',
+};
+const EVENT_ICON = {
+  boom: 'assets/ui/chart-line.svg',
+  rail: 'assets/ui/train-subway.svg',
+  typhoon: 'assets/ui/house-crack.svg',
+  charity: 'assets/ui/hand-holding-dollar.svg',
+  tax: 'assets/ui/sack-dollar.svg',
+};
+const mi = (src) => `<i class="mi" style="--i:url('${src}')"></i>`;
 
 const TILE_ICON = {
   go: '1f3c1.svg',
@@ -536,11 +554,13 @@ function renderCenter(v) {
       <em>${esc(p.name)}</em><b>¥${fmt(p.cash)}</b>
     </span>`).join('');
 
+  const ev = v.event ? EVENT_TEXT[v.event.id] : null;
   el.innerHTML = `<div class="cc-watermark">大富翁</div>
   <div class="center-inner">
     <div class="cc-block">
       <div class="cc-top">
         <span class="cc-round">第 ${v.round} / ${v.roundLimit} 回合</span>
+        ${ev ? `<span class="cc-event">${mi(EVENT_ICON[ev.id] || 'assets/ui/bolt.svg')}${esc(ev.name)}</span>` : ''}
         <div class="cc-turn-row">
           ${cur ? `<img class="cc-av" src="${curPiece}" alt="">` : ''}
           <span class="cc-turn${isMine ? ' mine' : ''}">${turnText}</span>
@@ -575,15 +595,17 @@ function renderPlayers(v) {
     const tags = [];
     if (p.isHost) tags.push('<span class="tag">房主</span>');
     if (p.isBot) tags.push('<span class="tag">电脑</span>');
+    if (p.persona) tags.push(`<span class="tag persona">${PERSONAS[p.persona] || p.persona}</span>`);
     if (!p.connected && !p.isBot) tags.push('<span class="tag off">离线</span>');
     if (p.inJail) tags.push('<span class="tag jail">狱</span>');
     if (p.bankrupt) tags.push('<span class="tag off">破产</span>');
+    const itemTag = p.itemCount ? ` · 道具×${p.itemCount}` : '';
     return `<div class="prow${p.id === v.turnId ? ' turn' : ''}${p.bankrupt ? ' dead' : ''}" data-pid="${p.id}">
       <div class="prow-head">
         <span class="pavatar" style="--pc:${p.color}"><img src="${icon(pieceOf(p.piece).file)}" alt=""></span>
         <div class="pinfo">
           <b>${esc(p.name)}${p.id === S.me ? ' <span class="me">(我)</span>' : ''}</b>
-          <small>¥${fmt(p.cash)} · ${mine.length} 块地${p.jailCards ? ` · 出狱卡×${p.jailCards}` : ''}</small>
+          <small>¥${fmt(p.cash)} · ${mine.length} 块地${p.jailCards ? ` · 出狱卡×${p.jailCards}` : ''}${itemTag}</small>
         </div>
         <div class="ptags">${tags.join('')}</div>
       </div>
@@ -607,14 +629,43 @@ function pieceGrid(v, me) {
 
 function actionLobby(v, isHost, me) {
   const bots = v.players.filter((p) => p.isBot);
+  const rounds = [20, 35, 50].map((n) => `<button class="round-opt${v.roundLimit === n ? ' on' : ''}" data-act="setRounds" data-rounds="${n}" ${isHost ? '' : 'disabled'}>${n}</button>`).join('');
   return `<div class="act-head"><h3>准备中</h3><span>${v.players.length}/6 人</span></div>
     <p class="act-msg">房间码 <b>${v.code}</b>，先选一个自己的棋子。人齐后房主开局。</p>
     ${pieceGrid(v, me)}
+    <div class="rounds-row"><span>回合上限</span><div class="round-opts">${rounds}</div></div>
     ${isHost ? `<div class="btn-row">
       <button class="btn primary big" data-act="start" ${v.players.length < 2 ? 'disabled' : ''}>开始游戏</button>
       <button class="btn" data-act="addBot" ${v.players.length >= 6 ? 'disabled' : ''}>添加电脑</button>
     </div>` : '<p class="act-msg">等待房主开始…</p>'}
     ${bots.length ? `<div class="mini-list">${bots.map((b) => `<div class="mini-row"><img src="${icon(pieceOf(b.piece).file)}" alt=""><span>${esc(b.name)}</span><button class="btn tiny" data-act="removeBot" data-id="${b.id}">移除</button></div>`).join('')}</div>` : ''}`;
+}
+
+function missionCardHTML(v, me) {
+  if (!me || !me.mission) return '';
+  const text = MISSION_TEXT[me.mission] || me.mission;
+  const minRound = v.missionMinRound || 5;
+  const locked = v.round < minRound;
+  return `<div class="mission-card">
+    <span class="mc-ico">${mi('assets/ui/bullseye.svg')}</span>
+    <div class="mc-body"><b>秘密任务</b><span>${esc(text)}</span></div>
+    <em>${locked ? `第 ${minRound} 回合起可达成` : '已生效'}</em>
+  </div>`;
+}
+
+function itemsHTML(v, me, myTurn) {
+  const items = me.items || [];
+  const btns = items.map((id) => {
+    const meta = ITEMS[id];
+    if (!meta) return '';
+    return `<button class="item-btn" data-ui="item" data-item="${id}" title="${esc(meta.desc)}" ${myTurn ? '' : 'disabled'}>
+      ${mi(ITEM_ICON[id])}<span>${meta.name}</span>
+    </button>`;
+  }).join('');
+  return `<div class="items-bar">
+    <div class="items-head"><span>道具 ${items.length}/3</span>${myTurn ? '' : '<em>轮到自己才能用</em>'}</div>
+    <div class="items-row">${btns || '<div class="empty">经过起点、或抽到道具卡会获得</div>'}</div>
+  </div>`;
 }
 
 function actionEnded(v, isHost) {
@@ -623,11 +674,16 @@ function actionEnded(v, isHost) {
     ? v.finalRank
     : [...v.players].sort((a, b) => b.cash - a.cash).map((p) => ({ id: p.id, name: p.name, worth: p.cash }));
   const winnerWorth = rank.find((r) => r.id === v.winnerId);
+  const byMission = v.missionWin && v.missionWin === v.winnerId;
   return `<div class="over-card">
     <img class="trophy" src="${icon('1f3c6.svg')}" alt="">
     <h2>${esc(winner ? winner.name : '—')} 获胜</h2>
-    <p class="win">${winnerWorth ? `净资产 ¥${fmt(winnerWorth.worth)}` : ''}</p>
-    <table>${rank.map((r) => `<tr><td>${esc(r.name)}</td><td>¥${fmt(r.worth)}</td></tr>`).join('')}</table>
+    <p class="win">${byMission ? '完成秘密任务' : winnerWorth ? `净资产 ¥${fmt(winnerWorth.worth)}` : ''}</p>
+    <table>${rank.map((r) => {
+      const p = v.players.find((x) => x.id === r.id);
+      const m = p && p.mission ? MISSION_TEXT[p.mission] : '';
+      return `<tr><td>${esc(r.name)}${m ? `<br><small class="mission-line">任务：${esc(m)}</small>` : ''}</td><td>¥${fmt(r.worth)}</td></tr>`;
+    }).join('')}</table>
     ${isHost
       ? '<button class="btn primary big wide" data-act="restart">再来一局</button>'
       : '<p class="act-msg">等待房主开下一局…</p>'}
@@ -736,7 +792,7 @@ function tradeBarHTML(v, me) {
       <button class="btn tiny" data-act="tradeCancel" data-id="${t.id}">取消</button>
     </div>`;
   }
-  return '<button class="btn wide trade-open" data-ui="trade">🤝 发起交易</button>';
+  return '<button class="btn wide trade-open" data-ui="trade">' + mi('assets/ui/handshake.svg') + ' 发起交易</button>';
 }
 
 function tileBtn(v, i, side, selected) {
@@ -831,8 +887,49 @@ function submitTrade() {
   toast('交易已发起，等待对方回应');
 }
 
-function renderAction(v) {
-  const me = v.players.find((p) => p.id === S.me);
+// ---------------- 道具使用 ----------------
+
+function openItemPicker(item) {
+  const v = S.view;
+  if (!v) return;
+  if (item === 'dice') {
+    const nums = Array.from({ length: 11 }, (_, k) => k + 2);
+    showModal(`<h2 class="trade-title">遥控骰子</h2>
+      <p class="trade-hint">选一个总点数（2–12），下一次掷骰直接按这个结果走。</p>
+      <div class="dice-grid">${nums.map((n) => `<button class="dice-pick" data-dice="${n}">${n}</button>`).join('')}</div>
+      <button class="btn wide" id="modalClose">取消</button>`);
+    return;
+  }
+  if (item === 'demolish') {
+    const targets = Object.keys(v.houses)
+      .filter((i) => (v.houses[i] || 0) > 0 && v.owners[i] !== S.me)
+      .map(Number);
+    if (!targets.length) { toast('现在没有可以拆的房子'); return; }
+    showModal(`<h2 class="trade-title">拆迁卡</h2>
+      <p class="trade-hint">选一块对手的房子拆掉，旅馆会降回 4 栋。</p>
+      <div class="pick-list">${targets.map((i) => {
+        const t = BOARD[i];
+        const owner = v.players.find((p) => p.id === v.owners[i]);
+        const h = v.houses[i];
+        return `<button class="pick-tile" data-demolish="${i}">
+          <b>${esc(t.name)}</b>
+          <span>${esc(owner ? owner.name : '')} · ${h >= 5 ? '旅馆' : `${h} 栋`}</span>
+        </button>`;
+      }).join('')}</div>
+      <button class="btn wide" id="modalClose">取消</button>`);
+    return;
+  }
+  if (item === 'equalize') {
+    showModal(`<h2 class="trade-title">均富卡</h2>
+      <p class="trade-hint">所有存活玩家的现金会变成平均值，确定使用吗？</p>
+      <div class="btn-row">
+        <button class="btn primary big" id="itemConfirm">使用</button>
+        <button class="btn big" id="modalClose">取消</button>
+      </div>`);
+  }
+}
+
+function renderAction(v) {  const me = v.players.find((p) => p.id === S.me);
   const el = $('#action');
   if (!me) { el.innerHTML = ''; return; }
 
@@ -840,18 +937,19 @@ function renderAction(v) {
   if (v.phase === 'ended') { el.innerHTML = actionEnded(v, v.hostId === S.me); return; }
 
   const myTurn = v.turnId === S.me;
-  let html = '';
+  let html = missionCardHTML(v, me);
   if (myTurn) {
-    if (v.phase === 'roll') html = actionRoll(v, me);
-    else if (v.phase === 'buy') html = actionBuy(v, me);
-    else html = `<div class="act-head"><h3>轮到你</h3></div>
+    if (v.phase === 'roll') html += actionRoll(v, me);
+    else if (v.phase === 'buy') html += actionBuy(v, me);
+    else html += `<div class="act-head"><h3>轮到你</h3></div>
       <p class="act-msg">可以继续建造、抵押，或者结束回合。</p>
       <button class="btn primary big wide" data-act="end">结束回合</button>`;
   } else {
     const t = v.players.find((p) => p.id === v.turnId);
-    html = `<div class="act-head"><h3>等待中</h3></div>
+    html += `<div class="act-head"><h3>等待中</h3></div>
       <p class="act-msg">等待 <b>${esc(t ? t.name : '…')}</b> 行动${t && t.isBot ? '（电脑思考中）' : ''}…</p>`;
   }
+  html += itemsHTML(v, me, myTurn);
   html += tradeBarHTML(v, me);
   html += actionProps(v, me, myTurn);
   el.innerHTML = html;
@@ -934,6 +1032,7 @@ $('#action').addEventListener('click', (e) => {
   const uiBtn = e.target.closest('button[data-ui]');
   if (uiBtn) {
     if (uiBtn.dataset.ui === 'trade') openTradeModal();
+    else if (uiBtn.dataset.ui === 'item') openItemPicker(uiBtn.dataset.item);
     return;
   }
   const btn = e.target.closest('button[data-act]');
@@ -1029,10 +1128,28 @@ function hideModal() {
   $('#modal').classList.add('hidden');
   $('#modalCard').classList.remove('wide');
   S.trade = null;
+  S.itemPending = null;
 }
 $('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal') hideModal(); });
 
 $('#modalCard').addEventListener('click', (e) => {
+  const diceBtn = e.target.closest('[data-dice]');
+  if (diceBtn && S.net) {
+    S.net.send({ type: 'useItem', item: 'dice', value: Number(diceBtn.dataset.dice) });
+    hideModal();
+    return;
+  }
+  const demoBtn = e.target.closest('[data-demolish]');
+  if (demoBtn && S.net) {
+    S.net.send({ type: 'useItem', item: 'demolish', i: Number(demoBtn.dataset.demolish) });
+    hideModal();
+    return;
+  }
+  if (e.target.id === 'itemConfirm' && S.net) {
+    S.net.send({ type: 'useItem', item: 'equalize' });
+    hideModal();
+    return;
+  }
   const tab = e.target.closest('.trade-tab');
   if (tab && S.trade) {
     S.trade.toId = tab.dataset.to;

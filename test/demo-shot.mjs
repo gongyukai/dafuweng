@@ -40,6 +40,12 @@ for (let i = 0; i < 20; i++) {
 await sleep(400);
 
 for (let round = 0; round < 400; round++) {
+  // 打到第 8 回合左右就截图，避免任务提前结束对局
+  const rt = await ev("document.querySelector('.cc-round')?.textContent || ''");
+  const m = rt.match(/第\s*(\d+)/);
+  if (m && Number(m[1]) >= 8) break;
+  if (await ev("document.querySelector('.over-card') !== null")) break;
+
   let acted = false;
   if (await click('button[data-act="roll"]')) acted = true;
   else if (await ev("!!document.querySelector('button[data-act=\"buy\"]')")) {

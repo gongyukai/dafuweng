@@ -770,6 +770,121 @@ button, input { font: inherit; color: inherit; }
 .over-card td { padding: 6px 4px; border-bottom: 1px solid var(--line); text-align: left; }
 .over-card td:last-child { text-align: right; font-variant-numeric: tabular-nums; color: var(--gold); }
 
+/* ---------------- 单色 UI 图标 / 新玩法组件 ---------------- */
+
+.mi {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  background: currentColor;
+  -webkit-mask: var(--i) center / contain no-repeat;
+  mask: var(--i) center / contain no-repeat;
+  vertical-align: -0.12em;
+  flex: none;
+}
+
+.rounds-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.round-opts { display: flex; gap: 6px; }
+.round-opt {
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  font-size: 12px;
+}
+.round-opt.on { border-color: var(--gold); color: var(--gold); background: rgba(233, 196, 134, 0.16); }
+.round-opt:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.mission-card {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(233, 196, 134, 0.38);
+  border-radius: 12px;
+  background: rgba(233, 196, 134, 0.09);
+}
+.mc-ico { width: 26px; height: 26px; display: grid; place-items: center; color: var(--gold); font-size: 20px; }
+.mc-body { flex: 1; min-width: 0; }
+.mc-body b { display: block; font-size: 11px; color: var(--gold); letter-spacing: 1px; }
+.mc-body span { font-size: 12.5px; color: var(--text); }
+.mission-card em { font-style: normal; font-size: 10px; color: var(--muted); text-align: right; max-width: 88px; }
+
+.items-bar { margin-bottom: 10px; }
+.items-head { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-bottom: 5px; }
+.items-head em { font-style: normal; color: #7d968a; }
+.items-row { display: flex; flex-wrap: wrap; gap: 5px; }
+.item-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  color: var(--gold);
+  font-size: 12px;
+  text-align: left;
+}
+.item-btn span { color: var(--text); }
+.item-btn .mi { font-size: 15px; }
+.item-btn:hover:not(:disabled) { background: rgba(233, 196, 134, 0.14); }
+.item-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.cc-event {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: clamp(9px, 1.2vh, 12px);
+  color: #ffd9a1;
+  background: rgba(233, 196, 134, 0.14);
+  border: 1px solid rgba(233, 196, 134, 0.35);
+  border-radius: 999px;
+  padding: 1px 9px;
+}
+
+.dice-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 10px 0 14px; }
+.dice-pick {
+  padding: 12px 0;
+  font-size: 16px;
+  font-weight: 700;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+}
+.dice-pick:hover { border-color: var(--gold); color: var(--gold); background: rgba(233, 196, 134, 0.14); }
+
+.pick-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; margin: 10px 0 14px; }
+.pick-tile {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  text-align: left;
+}
+.pick-tile b { font-size: 13px; }
+.pick-tile span { font-size: 11.5px; color: var(--muted); }
+.pick-tile:hover { border-color: var(--gold); }
+
+.mission-line { color: var(--muted); font-size: 10.5px; }
+.tag.persona { color: #9fd3e8; border-color: rgba(159, 211, 232, 0.45); }
+
 /* ---------------- 玩家交易 ---------------- */
 
 .trade-open { margin-bottom: 10px; }

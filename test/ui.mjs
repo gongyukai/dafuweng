@@ -73,12 +73,15 @@ const hasStart = await ev("!!document.querySelector('button[data-act=\"start\"]'
 if (hasStart) {
   const pieces = await ev("document.querySelectorAll('.piece-opt').length");
   assert(pieces >= 12, `棋子数量应 >= 12，实际 ${pieces}`);
+  const rounds = await ev("document.querySelectorAll('.round-opt').length");
+  assert(rounds === 3, `回合选择应有 3 项，实际 ${rounds}`);
   await ev("document.querySelectorAll('.piece-opt')[2].click()");
   await sleep(400);
-  console.log(`✅ 棋子选择器：${pieces} 种可选`);
+  console.log(`✅ 棋子选择器：${pieces} 种可选，回合数 ${rounds} 档`);
   await ev("document.querySelector('button[data-act=\"start\"]').click()");
   await until("!!document.querySelector('button[data-act=\"roll\"]')", '开局后的掷骰按钮');
-  console.log('✅ 大厅开始游戏');
+  await until("!!document.querySelector('.mission-card')", '秘密任务卡');
+  console.log('✅ 大厅开始游戏，秘密任务已下发');
 }
 
 // 3. 掷骰子
@@ -121,6 +124,22 @@ const tradeCols = await ev("document.querySelectorAll('.trade-col').length");
 assert(tradeCols === 2, `交易弹窗应有两栏，实际 ${tradeCols}`);
 await ev("document.querySelector('#tradeClose').click()");
 console.log('✅ 交易弹窗可打开（两栏）');
+
+// 道具栏（需要 ?dev=1）
+if (await ev("!!window.__dmj")) {
+  await ev(`(() => {
+    const S = window.__dmj;
+    const room = S.net.host.room;
+    const me = room.players.find((p) => p.id === S.me);
+    me.items = ['dice', 'shield'];
+    S.net.host.publish();
+  })()`);
+  await until("document.querySelectorAll('.item-btn').length === 2", '道具栏');
+  await ev("document.querySelector('.item-btn[data-item=\"dice\"]').click()");
+  await until("document.querySelectorAll('.dice-pick').length === 11", '遥控骰子弹窗');
+  await ev("document.querySelector('#modalClose').click()");
+  console.log('✅ 道具栏与遥控骰子弹窗');
+}
 
 // 4. 机器人自动行动
 const turnText = await ev("document.querySelector('.act-msg')?.textContent || ''");
