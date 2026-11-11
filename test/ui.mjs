@@ -135,6 +135,9 @@ if (await ev("!!window.__dmj")) {
     const S = window.__dmj;
     const room = S.net.host.room;
     const me = room.players.find((p) => p.id === S.me);
+    room.turn = room.players.indexOf(me);
+    room.phase = 'roll';
+    room.pendingBuy = null;
     me.items = ['dice', 'shield'];
     S.net.host.publish();
   })()`);
@@ -160,6 +163,23 @@ console.log('✅ 聊天发送并在列表显示');
 await ev("document.querySelector('#btnRules').click()");
 await until("!document.querySelector('#modal').classList.contains('hidden')", '规则弹窗');
 console.log('✅ 规则弹窗打开');
+
+// 筹钱面板（需要 ?dev=1）
+if (await ev("!!window.__dmj")) {
+  await ev(`(() => {
+    const S = window.__dmj;
+    const room = S.net.host.room;
+    const me = room.players.find((p) => p.id === S.me);
+    room.turn = room.players.indexOf(me);
+    room.debt = { payerId: me.id, amount: 800, creditorId: null, resume: 'end' };
+    room.phase = 'debt';
+    S.net.host.publish();
+  })()`);
+  await until("document.querySelector('#action .act-head h3')?.textContent.includes('筹钱')", '筹钱面板');
+  const hasBtn = await ev("!!document.querySelector('[data-act=\"declareBankrupt\"]')");
+  assert(hasBtn, '筹钱面板要有宣告破产按钮');
+  console.log('✅ 筹钱面板与宣告破产按钮');
+}
 await ev("document.querySelector('#modalClose').click()");
 
 // 7. 截图

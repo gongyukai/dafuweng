@@ -132,7 +132,7 @@ console.log('\n抵押与赎回');
   expect(p1.cash === 100 - Math.ceil(60 * 0.55), '赎回支付 55% 地价');
 }
 
-console.log('\n自动变卖抵债');
+console.log('\n现金不足：先筹钱再还款');
 {
   const { room, p1, p2 } = makeGame();
   room.owners[1] = p1.id;
@@ -141,31 +141,53 @@ console.log('\n自动变卖抵债');
   room.houses[3] = 3;
   p1.cash = 10;
   p2.cash = 1000;
-  // 玩家 1 掷到 5 号车站（属于玩家 2），租金 25，钱不够会自动卖房
+  // 玩家 1 掷到 5 号车站（属于玩家 2），租金 25，钱不够 → 进入筹钱
   room.owners[5] = p2.id;
   room.rng = seqRng([1 / 6, 2 / 6]);
   act(room, p1.id, { type: 'roll' });
-  expect(p1.cash >= 0, '现金不会变成负数');
+  expect(room.phase === 'debt' && room.debt && room.debt.amount === 25, '现金不够时进入筹钱阶段');
+  expect((room.houses[1] || 0) === 3, '不会自动卖房，交给玩家选择');
+  const r = act(room, p1.id, { type: 'sellHouse', i: 1 });
+  expect(r.ok, '玩家可以自己选择卖哪块地的房');
+  expect(room.phase !== 'debt', '凑够后自动付款');
+  expect(p1.cash >= 0 && p2.cash === 1025, '债主收到租金');
   expect(room.owners[1] === p1.id, '还完债仍保有地产');
+}
+
+console.log('\n筹钱阶段可以抵押');
+{
+  const { room, p1, p2 } = makeGame();
+  room.owners[6] = p1.id;   // 玩家 1 有一块无房的地，可以抵押
+  room.owners[1] = p2.id;
+  room.houses[1] = 5;       // 玩家 2 的旅馆，租金远超玩家 1 的现金
+  p1.cash = 5;
+  p2.cash = 1000;
+  p1.pos = 39;
+  room.rng = seqRng([0, 0]);
+  act(room, p1.id, { type: 'roll' });
+  expect(room.phase === 'debt', '进入筹钱阶段');
+  const r = act(room, p1.id, { type: 'mortgage', i: 6 });
+  expect(r.ok, '筹钱阶段可以抵押自己的地');
+  expect(room.phase !== 'debt', '抵押后凑够，自动付清');
+  expect(room.mortgaged[6] === true, '地产仍归玩家，但处于抵押状态');
 }
 
 console.log('\n破产转移');
 {
   const { room, p1, p2 } = makeGame();
-  room.owners[1] = p1.id;
   room.owners[3] = p1.id;
-  room.owners[5] = p2.id;
-  p1.cash = 5;
-  p2.cash = 1000;
-  // 让租金远超资产：玩家 2 在 1 号地盖满旅馆
   room.owners[1] = p2.id;
   room.houses[1] = 5;
+  p1.cash = 5;
+  p2.cash = 1000;
   p1.pos = 39;
   room.rng = seqRng([0, 0]); // 1 + 1 = 2，39 + 2 = 41 → 1 号地
   act(room, p1.id, { type: 'roll' });
-  expect(p1.bankrupt, '资不抵债后破产');
+  expect(room.phase === 'debt', '先进入筹钱阶段');
+  act(room, p1.id, { type: 'declareBankrupt' });
+  expect(p1.bankrupt, '玩家可以选择宣告破产');
   expect(p1.cash === 0, '破产后现金清零');
-  expect(room.owners[1] === p2.id, '地产转移给债主');
+  expect(room.owners[3] === p2.id, '地产转移给债主');
   const alive = room.players.filter((p) => !p.bankrupt);
   expect(alive.length === 1 && room.phase === 'ended', '只剩一人时游戏结束');
   expect(room.winnerId === p2.id, '胜者是债主');

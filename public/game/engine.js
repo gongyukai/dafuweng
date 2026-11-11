@@ -125,6 +125,7 @@ export function createRoom(code) {
     pendingBuy: null,
     lastCard: null,
     trade: null,
+    debt: null,
     event: null,
     missionWin: null,
     missionsEnabled: false,
@@ -318,12 +319,20 @@ function handleTrade(room, p, action) {
     for (const i of trade.get.tiles) if (!tileOkForTrade(room, i, p.id)) return fail('交易内容已变化，请让对方重新发起');
     if (trade.give.cash > from.cash) return fail('对方现金不足');
     if (trade.get.cash > p.cash) return fail('你的现金不足');
+    // 抵押地产交易：新业主需向银行支付抵押额 10% 的手续费（官方规则）
+    const feeOf = (tiles) => tiles.filter((i) => room.mortgaged[i]).reduce((s, i) => s + Math.floor(BOARD[i].price * 0.05), 0);
+    const feeGet = feeOf(trade.give.tiles); // 接收方（p）拿到抵押地的手续费
+    const feeGive = feeOf(trade.get.tiles); // 发起方（from）拿到抵押地的手续费
+    if (p.cash + trade.give.cash - trade.get.cash - feeGet < 0) return fail('你的现金不够支付抵押地产 10% 手续费');
+    if (from.cash - trade.give.cash + trade.get.cash - feeGive < 0) return fail('对方现金不够支付抵押地产 10% 手续费');
     for (const i of trade.give.tiles) room.owners[i] = p.id;
     for (const i of trade.get.tiles) room.owners[i] = from.id;
     from.cash -= trade.give.cash;
     p.cash += trade.give.cash;
     p.cash -= trade.get.cash;
     from.cash += trade.get.cash;
+    if (feeGet) { p.cash -= feeGet; pushLog(room, `${p.name} 为接手的抵押地产支付 10% 手续费 ¥${feeGet}`, 'money'); }
+    if (feeGive) { from.cash -= feeGive; pushLog(room, `${from.name} 为接手的抵押地产支付 10% 手续费 ¥${feeGive}`, 'money'); }
     pushLog(room, `交易达成：${from.name} 得到 ${tradeText(room, trade.get)}，${p.name} 得到 ${tradeText(room, trade.give)}`, 'trade');
     room.trade = null;
     room.seq++;
@@ -394,33 +403,45 @@ function ownedTiles(room, id) {
     .map(Number);
 }
 
-export function rentFor(room, tileIdx) {
+export function rentInfo(room, tileIdx) {
   const tile = BOARD[tileIdx];
   const ownerId = room.owners[tileIdx];
-  if (!ownerId || room.mortgaged[tileIdx]) return 0;
+  if (!ownerId) return { total: 0, base: 0, mult: 1, reason: '无主' };
+  if (room.mortgaged[tileIdx]) return { total: 0, base: 0, mult: 1, reason: '已抵押免租' };
   let base = 0;
+  let reason = '';
   if (tile.type === 'prop') {
     const g = GROUPS[tile.group];
     const houses = room.houses[tileIdx] || 0;
-    if (houses > 0) base = tile.rent[Math.min(houses, 5)];
-    else {
+    if (houses > 0) {
+      base = tile.rent[Math.min(houses, 5)];
+      reason = houses >= 5 ? '旅馆' : `${houses} 栋房子`;
+    } else {
       const ownsAll = g.tiles.every((i) => room.owners[i] === ownerId);
       base = ownsAll ? tile.rent[0] * 2 : tile.rent[0];
+      reason = ownsAll ? '整组同色 ×2' : '基础租金';
     }
   } else if (tile.type === 'rail') {
     const n = RAIL_TILES.filter((i) => room.owners[i] === ownerId).length;
     base = [0, 25, 50, 100, 200][n] || 0;
+    reason = `${n} 个车站`;
   } else if (tile.type === 'util') {
     const n = UTIL_TILES.filter((i) => room.owners[i] === ownerId).length;
     const total = (room.dice[0] || 0) + (room.dice[1] || 0);
     base = total * (n === 2 ? 10 : 4);
+    reason = `${n} 家公用事业 × 骰子 ${total}`;
   }
-  // 全场事件加成
+  let mult = 1;
   if (room.event && room.event.round === room.round) {
-    if (room.event.id === 'boom') base *= 2;
-    if (room.event.id === 'rail' && tile.type === 'rail') base *= 2;
+    if (room.event.id === 'boom') mult = 2;
+    if (room.event.id === 'rail' && tile.type === 'rail') mult = 2;
   }
-  return Math.round(base);
+  if (mult > 1) reason += ' · 活动 ×2';
+  return { total: Math.round(base * mult), base, mult, reason };
+}
+
+export function rentFor(room, tileIdx) {
+  return rentInfo(room, tileIdx).total;
 }
 
 function sellHouseToBank(room, p, i) {
@@ -495,6 +516,7 @@ function bankrupt(room, p, creditorId) {
   p.jailCards = 0;
   if (room.trade && (room.trade.fromId === p.id || room.trade.toId === p.id)) room.trade = null;
   room.again = false;
+  room.debt = null;
   pushLog(room, `${p.name} 破产了！`, 'bankrupt');
   checkEnd(room);
 }
@@ -510,6 +532,52 @@ function pay(room, from, amount, toId = null) {
   }
   if (paid < amount) bankrupt(room, from, toId);
   return paid;
+}
+
+function transferCash(room, from, toId, amount) {
+  const paid = Math.min(from.cash, amount);
+  from.cash -= paid;
+  if (toId) {
+    const to = byId(room, toId);
+    if (to && !to.bankrupt) to.cash += paid;
+  }
+  return paid;
+}
+
+// 真人玩家现金不足时进入「筹钱」阶段，由玩家自己决定卖房/抵押；机器人仍然自动变卖
+function charge(room, payer, amount, creditorId = null) {
+  if (!payer || payer.bankrupt || amount <= 0) return 'ok';
+  if (payer.cash >= amount) {
+    transferCash(room, payer, creditorId, amount);
+    return 'ok';
+  }
+  if (payer.isBot) {
+    raiseFunds(room, payer, amount);
+    const paid = transferCash(room, payer, creditorId, amount);
+    if (paid < amount) { bankrupt(room, payer, creditorId); return 'bankrupt'; }
+    return 'ok';
+  }
+  room.debt = {
+    payerId: payer.id,
+    amount,
+    creditorId,
+    resume: room.again && !payer.inJail ? 'roll' : 'end',
+  };
+  room.phase = 'debt';
+  pushLog(room, `${payer.name} 需要支付 ¥${amount}，请卖房或抵押筹钱（也可宣告破产）`, 'money');
+  return 'debt';
+}
+
+function settleDebt(room) {
+  const d = room.debt;
+  if (!d) return;
+  const payer = byId(room, d.payerId);
+  room.debt = null;
+  if (!payer || payer.bankrupt) { room.phase = 'end'; return; }
+  transferCash(room, payer, d.creditorId, d.amount);
+  room.phase = d.resume || 'end';
+  pushLog(room, `${payer.name} 付清 ¥${d.amount}`, 'money');
+  checkEnd(room);
 }
 
 function checkEnd(room) {
@@ -634,7 +702,8 @@ function applyCard(room, p, drawn, depth) {
         p.cash += card.amount;
         pushLog(room, `${p.name} 获得 ¥${card.amount}`, 'money');
       } else {
-        pay(room, p, -card.amount, null);
+        pushLog(room, `${p.name} 需要支付 ¥${-card.amount}`, 'money');
+        if (charge(room, p, -card.amount, null) === 'debt') return;
       }
       break;
     case 'move':
@@ -706,6 +775,7 @@ function resolveLanding(room, p, depth = 0) {
     case 'util': {
       const ownerId = room.owners[tile.i];
       if (!ownerId) {
+        if (room.mortgaged[tile.i]) delete room.mortgaged[tile.i];
         room.pendingBuy = tile.i;
         pushLog(room, `${p.name} 到达 ${tile.name}（售价 ¥${tile.price}），可以购买`, 'buy');
       } else if (ownerId === p.id) {
@@ -714,20 +784,20 @@ function resolveLanding(room, p, depth = 0) {
         pushLog(room, `${tile.name} 处于抵押状态，免租`, 'info');
       } else {
         const owner = byId(room, ownerId);
-        const rent = rentFor(room, tile.i);
+        const info = rentInfo(room, tile.i);
         if (p.items.includes('shield')) {
           p.items = p.items.filter((x) => x !== 'shield');
-          pushLog(room, `${p.name} 用免租卡抵消了 ${owner.name} 的 ${tile.name} 租金 ¥${rent}`, 'card');
+          pushLog(room, `${p.name} 用免租卡抵消了 ${owner.name} 的 ${tile.name} 租金 ¥${info.total}`, 'card');
         } else {
-          pushLog(room, `${p.name} 踩到 ${owner.name} 的 ${tile.name}，支付租金 ¥${rent}`, 'rent');
-          pay(room, p, rent, ownerId);
+          pushLog(room, `${p.name} 踩到 ${owner.name} 的 ${tile.name}，应付租金 ¥${info.total}（${info.reason}）`, 'rent');
+          if (charge(room, p, info.total, ownerId) === 'debt') return;
         }
       }
       break;
     }
     case 'tax':
       pushLog(room, `${p.name} 缴纳${tile.name} ¥${tile.amount}`, 'money');
-      pay(room, p, tile.amount, null);
+      if (charge(room, p, tile.amount, null) === 'debt') return;
       break;
     case 'chance':
     case 'chest':
@@ -830,6 +900,7 @@ function finalizeRanking(room) {
 function nextTurn(room) {  if (room.phase === 'ended') return;
   const n = room.players.length;
   const prev = room.turn;
+  room.debt = null;
   for (let k = 1; k <= n; k++) {
     const i = (prev + k) % n;
     const p = room.players[i];
@@ -946,7 +1017,7 @@ function doRoll(room) {
   room.again = dbl;
   moveBy(room, p, total);
   resolveLanding(room, p);
-  if (room.phase === 'ended') return;
+  if (room.phase === 'ended' || room.phase === 'debt') return;
   room.phase = room.pendingBuy != null ? 'buy' : room.again && !p.inJail ? 'roll' : 'end';
 }
 
@@ -957,6 +1028,7 @@ function doBuy(room, p) {
   p.cash -= tile.price;
   room.owners[tile.i] = p.id;
   room.houses[tile.i] = 0;
+  delete room.mortgaged[tile.i]; // 无主地不该带着抵押状态
   pushLog(room, `${p.name} 买下了 ${tile.name}（¥${tile.price}）`, 'buy');
   room.pendingBuy = null;
   room.phase = room.again ? 'roll' : 'end';
@@ -1059,6 +1131,15 @@ function doUnmortgage(room, p, i) {
 
 function normalize(room) {
   if (room.phase === 'ended' || room.phase === 'lobby') return;
+  // 兜底：破产玩家的地产不能残留（否则无人可买、无法抵押）
+  for (const key of Object.keys(room.owners)) {
+    const owner = byId(room, room.owners[key]);
+    if (!owner || owner.bankrupt) {
+      delete room.owners[key];
+      delete room.houses[key];
+      delete room.mortgaged[key];
+    }
+  }
   const cur = currentPlayer(room);
   if (!cur || cur.bankrupt) {
     if (alivePlayers(room).length <= 1) { checkEnd(room); return; }
@@ -1166,6 +1247,30 @@ function actInner(room, playerId, action) {
     return fail('本局已经结束');
   }
 
+  if (room.phase === 'debt') {
+    const d = room.debt;
+    if (!d) { room.phase = 'end'; return fail('状态异常，请重新操作'); }
+    if (p.id !== d.payerId) return fail('等待对方筹钱');
+    if (type === 'declareBankrupt') {
+      transferCash(room, p, d.creditorId, d.amount);
+      room.debt = null;
+      bankrupt(room, p, d.creditorId);
+      room.seq++;
+      return ok();
+    }
+    if (type === 'sellHouse' || type === 'mortgage') {
+      const r = type === 'sellHouse'
+        ? doSellHouse(room, p, Number(action.i))
+        : doMortgage(room, p, Number(action.i));
+      if (r.ok) {
+        room.seq++;
+        if (p.cash >= d.amount) settleDebt(room);
+      }
+      return r;
+    }
+    return fail('请卖房或抵押筹钱，也可以宣告破产');
+  }
+
   const cur = currentPlayer(room);
   if (type && type.startsWith('trade')) return handleTrade(room, p, action);
   if (type === 'useItem') {
@@ -1242,13 +1347,21 @@ function botUseItem(room, p) {
     }
   }
   if (p.items.includes('dice')) {
-    const r = act(room, p.id, { type: 'useItem', item: 'dice', value: 7 });
-    if (r.ok) return true;
+    // 只在前方 4-9 格有买得起的无主地时才用
+    for (let d = 4; d <= 9; d++) {
+      const i = (p.pos + d) % 40;
+      const t = BOARD[i];
+      if (!room.owners[i] && t.price && p.cash >= t.price) {
+        const r = act(room, p.id, { type: 'useItem', item: 'dice', value: d });
+        if (r.ok) return true;
+        break;
+      }
+    }
   }
   return false;
 }
 
-function tradeAssetValue(room, side) {
+function botTradeValue(room, side) {
   let v = side.cash;
   for (const i of side.tiles) {
     const tile = BOARD[i];
@@ -1259,11 +1372,33 @@ function tradeAssetValue(room, side) {
 }
 
 function botTradeDecision(room, bot, trade) {
-  const gets = tradeAssetValue(room, trade.give);   // 机器人得到的
-  const gives = tradeAssetValue(room, trade.get);   // 机器人付出的
+  const gets = botTradeValue(room, trade.give);   // 机器人得到的
+  const gives = botTradeValue(room, trade.get);   // 机器人付出的
   if (gets <= 0 && gives > 0) return false;
-  // 稍微高估自己手里的地，避免被白嫖
   return gets >= gives * 1.05;
+}
+
+// 机器人主动发起交易：差一块地就能凑齐同色时，出价收购
+function botFindTrade(room, p) {
+  if (room.trade) return null;
+  if (p.cash < 500) return null;
+  for (const g of Object.values(GROUPS)) {
+    const own = g.tiles.filter((i) => room.owners[i] === p.id).length;
+    if (own !== g.tiles.length - 1) continue;
+    const missing = g.tiles.find((i) => room.owners[i] !== p.id);
+    if (missing == null) continue;
+    const ownerId = room.owners[missing];
+    if (!ownerId) continue;
+    const owner = byId(room, ownerId);
+    if (!owner || owner.bankrupt || owner.id === p.id) continue;
+    if ((room.houses[missing] || 0) > 0) continue;
+    if (room.mortgaged[missing]) continue;
+    const price = BOARD[missing].price;
+    const cash = Math.min(p.cash - 400, Math.floor(price * (owner.isBot ? 1.5 : 1.9)));
+    if (cash < Math.floor(price * 0.9)) continue;
+    return { type: 'tradeOffer', toId: owner.id, giveTiles: [], getTiles: [missing], giveCash: cash };
+  }
+  return null;
 }
 
 export function tickBots(room) {
@@ -1288,8 +1423,13 @@ export function tickBots(room) {
       if (p.jailCards > 0) return act(room, p.id, { type: 'jailcard' }).ok;
       if (p.cash > 250) { const r = act(room, p.id, { type: 'bail' }); if (r.ok) return true; }
     }
-    // 捣蛋型机器人会主动用道具
-    if (p.persona === 'trickster' && p.items.length && rng() > 0.45) {
+    // 主动发起交易（差一块地成组时）
+    if (rng() > 0.55) {
+      const offer = botFindTrade(room, p);
+      if (offer && act(room, p.id, offer).ok) return true;
+    }
+    // 所有性格都会在合适的时候用道具
+    if (p.items.length && rng() > (p.persona === 'trickster' ? 0.3 : 0.55)) {
       if (botUseItem(room, p)) return true;
     }
     return act(room, p.id, { type: 'roll' }).ok;
@@ -1341,6 +1481,7 @@ export function view(room, youId) {
     pendingBuy: room.pendingBuy,
     lastCard: room.lastCard,
     trade: currentTrade(room),
+    debt: room.debt ? { payerId: room.debt.payerId, amount: room.debt.amount, creditorId: room.debt.creditorId } : null,
     event: room.event && room.event.round === room.round ? room.event : null,
     missionWin: room.missionWin,
     missionMinRound: MISSION_MIN_ROUND,

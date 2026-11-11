@@ -1,5 +1,5 @@
 import { BOARD, GROUPS, sideOf, gridPos } from '../game/board.js';
-import { PIECES, pieceOf, PERSONAS, MISSIONS, ITEMS, EVENTS } from '../game/engine.js';
+import { PIECES, pieceOf, PERSONAS, MISSIONS, ITEMS, EVENTS, rentInfo } from '../game/engine.js';
 import {
   HttpNet, HostNet, GuestNet, LocalNet, loadSession, saveSession, detectServer,
 } from './net.js';
@@ -523,8 +523,10 @@ function focusCard(v, idx) {
       const max = Math.max(...t.rent);
       bars = `<div class="fc-bars">${t.rent.map((r) => `<span style="height:${Math.max(10, Math.round((r / max) * 100))}%" title="¥${r}"></span>`).join('')}</div>`;
     }
+    const info = rentInfo(v, idx);
     body = `<div class="fc-row"><span>标价</span><b>¥${t.price}</b></div>
       ${owner ? `<div class="fc-row"><span>拥有者</span><b style="color:${owner.color}">${esc(owner.name)}</b></div>` : '<div class="fc-row"><span>状态</span><b class="free">无主</b></div>'}
+      ${owner ? `<div class="fc-row"><span>当前租金</span><b>¥${fmt(info.total)}<small class="fc-reason">${esc(info.reason)}</small></b></div>` : ''}
       ${h > 0 ? `<div class="fc-row"><span>建筑</span><b>${h >= 5 ? '旅馆' : `${h} 栋房子`}</b></div>` : ''}
       ${v.mortgaged[idx] ? '<div class="fc-row"><span>状态</span><b class="warn">已抵押</b></div>' : ''}
       ${rents ? `<div class="fc-rents">${t.type === 'prop' ? '租金 ' + rents : t.type === 'rail' ? '租金 ¥25 / 50 / 100 / 200' : '租金 骰子点数 ×4（双持 ×10）'}</div>` : ''}
@@ -762,8 +764,9 @@ function actionBuy(v, me) {
     </div>`;
 }
 
-function actionProps(v, me, myTurn) {
+function actionProps(v, me, myTurn, debtMode = false) {
   const mine = Object.keys(v.owners).filter((i) => v.owners[i] === me.id).map(Number).sort((a, b) => a - b);
+  const canSellMode = myTurn || debtMode;
   if (!mine.length) {
     return `<div class="props"><h4><span>我的地产</span><span>0 块</span></h4><div class="empty">还没有地产，踩到空地就可以买。</div></div>`;
   }
@@ -777,10 +780,10 @@ function actionProps(v, me, myTurn) {
     const minH = g ? Math.min(...g.tiles.map((x) => v.houses[x] || 0)) : h;
     const maxH = g ? Math.max(...g.tiles.map((x) => v.houses[x] || 0)) : h;
     const cost = g ? g.houseCost : 0;
-    const canBuild = myTurn && g && ownsAll && !anyMort && h < 5 && h === minH && me.cash >= cost;
-    const canSell = myTurn && h > 0 && h === maxH;
-    const canMort = myTurn && !v.mortgaged[i] && !groupTiles.some((x) => (v.houses[x] || 0) > 0);
-    const canUnmort = myTurn && v.mortgaged[i] && me.cash >= Math.ceil(t.price * 0.55);
+    const canBuild = myTurn && !debtMode && g && ownsAll && !anyMort && h < 5 && h === minH && me.cash >= cost;
+    const canSell = canSellMode && h > 0 && h === maxH;
+    const canMort = canSellMode && !v.mortgaged[i] && !groupTiles.some((x) => (v.houses[x] || 0) > 0);
+    const canUnmort = myTurn && !debtMode && v.mortgaged[i] && me.cash >= Math.ceil(t.price * 0.55);
     const label = h >= 5 ? '旅馆' : h > 0 ? `${h} 房` : '';
     return `<div class="prop">
       <span class="swatch" style="background:${g ? g.color : '#7f8f85'}"></span>
@@ -837,9 +840,9 @@ function tileBtn(v, i, side, selected) {
   const t = BOARD[i];
   const g = t.group ? GROUPS[t.group] : null;
   const h = v.houses[i] || 0;
-  return `<button class="ttile${selected ? ' sel' : ''}" data-side="${side}" data-tile="${i}" ${h > 0 ? 'disabled title="有房子的地产不能交易，先卖掉房子"' : ''}>
+  return `<button class="ttile${selected ? ' sel' : ''}${v.mortgaged[i] ? ' mort' : ''}" data-side="${side}" data-tile="${i}" ${h > 0 ? 'disabled title="有房子的地产不能交易，先卖掉房子"' : ''} title="${v.mortgaged[i] ? '已抵押：接手需付 10% 手续费' : ''}">
     <i style="background:${g ? g.color : '#8fa39a'}"></i>
-    <span>${esc(t.short || t.name)}</span>
+    <span>${esc(t.short || t.name)}${v.mortgaged[i] ? ' 抵' : ''}</span>
     ${h ? `<em>${h >= 5 ? '馆' : h}</em>` : ''}
   </button>`;
 }
@@ -975,6 +978,23 @@ function renderAction(v) {  const me = v.players.find((p) => p.id === S.me);
   if (v.phase === 'ended') { el.innerHTML = actionEnded(v, v.hostId === S.me); return; }
 
   const myTurn = v.turnId === S.me;
+  if (v.phase === 'debt' && v.debt) {
+    const debtor = v.players.find((p) => p.id === v.debt.payerId);
+    const creditor = v.debt.creditorId ? v.players.find((p) => p.id === v.debt.creditorId) : null;
+    const inDebt = v.debt.payerId === S.me;
+    let h = missionCardHTML(v, me);
+    if (inDebt) {
+      h += `<div class="act-head"><h3>需要筹钱</h3><span>¥${fmt(v.debt.amount)}</span></div>
+        <p class="act-msg">你要支付 <b>¥${fmt(v.debt.amount)}</b>${creditor ? ` 给 ${esc(creditor.name)}` : ' 给银行'}。现金不够，请卖房或抵押地产，凑够后会自动付款。</p>
+        <button class="btn danger wide" data-act="declareBankrupt">宣告破产</button>`;
+    } else {
+      h += `<div class="act-head"><h3>等待中</h3></div>
+        <p class="act-msg">等待 <b>${esc(debtor ? debtor.name : '…')}</b> 筹钱…</p>`;
+    }
+    h += actionProps(v, me, false, inDebt);
+    el.innerHTML = h;
+    return;
+  }
   let html = missionCardHTML(v, me);
   if (myTurn) {
     if (v.phase === 'roll') html += actionRoll(v, me);

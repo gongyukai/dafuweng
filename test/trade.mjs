@@ -1,5 +1,6 @@
 // 玩家交易单测：发起、接受、拒绝、取消、非法内容、过期
 import { createRoom, addPlayer, startGame, act, view, currentTrade, tickBots } from '../public/game/engine.js';
+import { BOARD } from '../public/game/board.js';
 
 let passed = 0;
 function expect(cond, msg) {
@@ -144,6 +145,41 @@ console.log('\n机器人回应交易');
   tickBots(room2);
   expect(room2.trade === null, '机器人也会拒绝不划算的交易');
   expect(room2.owners[1] === a.id, '拒绝后地产不变');
+}
+
+console.log('\n抵押地产交易要付 10% 手续费');
+{
+  const { room, p1, p2 } = makeGame();
+  room.owners[1] = p1.id;
+  room.mortgaged[1] = true;
+  p1.cash = 1000;
+  p2.cash = 1000;
+  const offer = act(room, p1.id, { type: 'tradeOffer', toId: p2.id, giveTiles: [1], getTiles: [] });
+  expect(offer.ok, '发起带抵押地产的交易');
+  const id = room.trade.id;
+  const fee = Math.floor(BOARD[1].price * 0.05);
+  const res = act(room, p2.id, { type: 'tradeAccept', id });
+  expect(res.ok, '接受交易');
+  expect(room.owners[1] === p2.id, '地产转给新业主');
+  expect(p2.cash === 1000 - fee, `新业主支付抵押额 10% 手续费（¥${fee}）`);
+  expect(room.mortgaged[1] === true, '抵押状态随地产保留');
+}
+
+console.log('\n无人拥有的抵押地块可以被购买');
+{
+  const { room, p1 } = makeGame();
+  room.owners[1] = p1.id;
+  room.mortgaged[1] = true;
+  delete room.owners[1]; // 模拟脏数据：无主但残留抵押标记
+  p1.pos = 39;
+  room.turn = 0;
+  room.phase = 'roll';
+  room.rng = (() => { const s = [0, 0]; let i = 0; return () => s[i++ % 2]; })();
+  act(room, p1.id, { type: 'roll' }); // 39 + 2 → 1 号地
+  expect(room.phase === 'buy', '无主抵押地仍然可以购买');
+  act(room, p1.id, { type: 'buy' });
+  expect(room.owners[1] === p1.id, '买下成功');
+  expect(!room.mortgaged[1], '购买后清掉抵押标记');
 }
 
 console.log(`\n🎉 交易单测全部通过（${passed} 项断言）`);

@@ -1,7 +1,8 @@
 // 新玩法单测：回合设置、秘密任务、道具、全场事件、电脑性格
 import {
-  createRoom, addPlayer, startGame, act, view, PERSONA_IDS, MISSIONS, tickStall,
+  createRoom, addPlayer, startGame, act, view, PERSONA_IDS, MISSIONS, tickStall, tickBots, rentInfo,
 } from '../public/game/engine.js';
+import { BOARD, GROUPS } from '../public/game/board.js';
 
 let passed = 0;
 function expect(cond, msg) {
@@ -229,6 +230,53 @@ console.log('\n回合超时跳过（防幽灵玩家卡死）');
   room.phase = 'roll';
   room.turnStartedAt = Date.now() - 31000;
   expect(tickStall(room) && room.turn === 0, '断线玩家 30 秒后跳过');
+}
+
+console.log('\n租金明细');
+{
+  const { room, players } = makeGame(2);
+  room.owners[1] = players[0].id;
+  room.owners[3] = players[0].id;
+  const info = rentInfo(room, 1);
+  expect(info.total === BOARD[1].rent[0] * 2, '整组同色租金 ×2');
+  expect(info.reason.includes('同色'), '显示翻倍原因');
+  room.event = { id: 'boom', round: room.round };
+  const info2 = rentInfo(room, 1);
+  expect(info2.mult === 2 && info2.total === info.total * 2, '全场事件再 ×2');
+}
+
+console.log('\n机器人主动发起交易');
+{
+  const room = createRoom('BT');
+  const bot = addPlayer(room, '电脑', { isBot: true }).player;
+  const human = addPlayer(room, '真人').player;
+  startGame(room);
+  const g = GROUPS.brown;
+  room.owners[g.tiles[0]] = bot.id;
+  room.owners[g.tiles[1]] = human.id;
+  bot.cash = 2000;
+  room.turn = 0;
+  room.phase = 'roll';
+  room.rng = () => 0.9;
+  const changed = tickBots(room);
+  expect(changed, '机器人有动作');
+  expect(room.trade && room.trade.fromId === bot.id, '机器人主动发起交易');
+  expect(room.trade.get.tiles.includes(g.tiles[1]), '想买的是缺的那块地');
+}
+
+console.log('\n机器人会用道具');
+{
+  const room = createRoom('BI');
+  const bot = addPlayer(room, '电脑', { isBot: true }).player;
+  addPlayer(room, '真人');
+  startGame(room);
+  bot.items = ['equalize'];
+  bot.cash = 100;
+  room.turn = 0;
+  room.phase = 'roll';
+  room.rng = () => 0.99;
+  tickBots(room);
+  expect(bot.items.length === 0, '普通性格也会在落后时用均富卡');
 }
 
 console.log(`\n🎉 新玩法单测全部通过（${passed} 项断言）`);
