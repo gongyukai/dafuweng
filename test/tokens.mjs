@@ -1,4 +1,4 @@
-﻿// 棋子定位回归测试：进监狱（传送）和普通移动后，棋子必须落在正确的格子上
+// 棋子定位回归测试：进监狱（传送）和普通移动后，棋子必须落在正确的格子上
 const CDP = process.env.CDP || 'http://127.0.0.1:9222';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -87,6 +87,27 @@ await sleep(900);
 d = await tokenToTileDistance(pid, 23);
 assert(d >= 0 && d < tileSize * 0.5, `长距离跳动后应在 23 号格，偏差 ${d}px`);
 console.log(`✅ 长距离跳动定位正确（偏差 ${d}px）`);
+
+// 4. 连续移动不应“走完又退回上一格”（旧 bug：动画待处理目标没清空）
+await ev(`(() => { const S = window.__dmj; const room = S.net.host.room;
+  const p = room.players[1]; p.inJail = false; p.pos = 5; S.net.host.publish(); })()`);
+await sleep(1100);
+await ev(`(() => { const S = window.__dmj; const room = S.net.host.room;
+  const p = room.players[1]; p.pos = 9; S.net.host.publish(); })()`);
+await sleep(300);
+// 走到一半时再来一次状态更新（模拟其他玩家行动）
+await ev("window.__dmj.net.host.publish()");
+await sleep(1500);
+await ev(`(() => { const S = window.__dmj; const room = S.net.host.room;
+  const p = room.players[1]; p.pos = 13; S.net.host.publish(); })()`);
+await sleep(1700);
+let maxD = 0;
+for (let i = 0; i < 10; i++) {
+  maxD = Math.max(maxD, await tokenToTileDistance(pid, 13));
+  await sleep(100);
+}
+assert(maxD < tileSize * 0.6, `移动结束后不应回跳，最大偏差 ${maxD}px`);
+console.log(`✅ 连续移动无回跳（最大偏差 ${maxD}px）`);
 
 console.log('\n🎉 棋子定位测试全部通过');
 process.exit(0);

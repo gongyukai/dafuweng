@@ -386,11 +386,10 @@ async function walkToken(t, from, to, v) {
     if (tile) { tile.classList.add('landed'); setTimeout(() => tile.classList.remove('landed'), 700); }
   }
   t.walking = false;
-  if (t.pending != null && t.pending !== t.pos) {
-    const next = t.pending;
-    const cur = t.pos;
-    t.pending = null;
-    walkToken(t, cur, next, v);
+  // 动画期间可能又来了新状态：以当前视图为准补走，而不是记住的旧目标
+  const latest = S.view && S.view.players.find((x) => x.id === t.el.dataset.pid);
+  if (latest && !latest.bankrupt && latest.pos !== t.pos) {
+    walkToken(t, t.pos, latest.pos, S.view);
   }
 }
 
@@ -410,7 +409,7 @@ function syncTokens(v) {
       el.style.setProperty('--pc', p.color);
       el.innerHTML = `<img src="${icon(pieceOf(p.piece).file)}" alt="${esc(p.name)}">`;
       layer.appendChild(el);
-      t = { el, pos: p.pos, walking: false, pending: null };
+      t = { el, pos: p.pos, walking: false };
       S.tokens.set(p.id, t);
       void el.offsetWidth;
       el.classList.remove('instant');
@@ -421,7 +420,7 @@ function syncTokens(v) {
     const img = t.el.querySelector('img');
     const src = icon(pieceOf(p.piece).file);
     if (img.getAttribute('src') !== src) img.src = src;
-    if (t.walking) { t.pending = p.pos; continue; }
+    if (t.walking) continue;
     if (t.pos !== p.pos) walkToken(t, t.pos, p.pos, v);
   }
   for (const [, t] of S.tokens) {
