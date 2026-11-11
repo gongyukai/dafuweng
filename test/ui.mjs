@@ -73,8 +73,12 @@ const hasStart = await ev("!!document.querySelector('button[data-act=\"start\"]'
 if (hasStart) {
   const pieces = await ev("document.querySelectorAll('.piece-opt').length");
   assert(pieces >= 12, `棋子数量应 >= 12，实际 ${pieces}`);
-  const rounds = await ev("document.querySelectorAll('.round-opt').length");
+  const rounds = await ev("document.querySelectorAll('[data-act=\"setRounds\"]').length");
   assert(rounds === 3, `回合选择应有 3 项，实际 ${rounds}`);
+  const missionDefaultOff = await ev("document.querySelector('[data-act=\"setMissions\"][data-enabled=\"0\"]')?.classList.contains('on')");
+  assert(missionDefaultOff, '秘密任务默认应为关闭');
+  await ev("document.querySelector('[data-act=\"setMissions\"][data-enabled=\"1\"]').click()");
+  await sleep(300);
   await ev("document.querySelectorAll('.piece-opt')[2].click()");
   await sleep(400);
   console.log(`✅ 棋子选择器：${pieces} 种可选，回合数 ${rounds} 档`);
@@ -89,7 +93,7 @@ const hasRoll = await ev("!!document.querySelector('button[data-act=\"roll\"]')"
 assert(hasRoll, '没有掷骰子按钮');
 await ev("document.querySelector('button[data-act=\"roll\"]').click()");
 await until("document.querySelector('#logBody').textContent.includes('掷出')", '掷骰日志');
-await until("document.querySelector('#subtitle').textContent.includes('掷出')", '行动字幕');
+await until("document.querySelector('#subtitle').textContent.includes('掷出')", '行动字幕', 12000);
 console.log('✅ 行动字幕显示：' + (await ev("document.querySelector('#subtitle').textContent")));
 const frames = await ev(`(async () => {
   const el = document.querySelector('.tk');

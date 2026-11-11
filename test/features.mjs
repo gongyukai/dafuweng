@@ -12,10 +12,31 @@ function expect(cond, msg) {
 
 function makeGame(n = 2) {
   const room = createRoom('FEAT');
+  room.missionsEnabled = true; // 这些用例测任务系统
   const players = [];
   for (let i = 0; i < n; i++) players.push(addPlayer(room, `P${i + 1}`).player);
   startGame(room);
   return { room, players };
+}
+
+console.log('\n秘密任务开关');
+{
+  const room = createRoom('OPT');
+  const host = addPlayer(room, '房主').player;
+  const other = addPlayer(room, '路人').player;
+  expect(room.missionsEnabled === false, '新建房间默认关闭秘密任务');
+  expect(!act(room, other.id, { type: 'setMissions', enabled: 1 }).ok, '非房主不能改胜利条件');
+  expect(act(room, host.id, { type: 'setMissions', enabled: 1 }).ok, '房主可以开启');
+  expect(room.missionsEnabled === true, '已开启');
+  startGame(room);
+  expect(room.players.every((p) => p.mission), '开启后开局会下发任务');
+
+  const room2 = createRoom('OPT2');
+  addPlayer(room2, 'A');
+  addPlayer(room2, 'B');
+  startGame(room2);
+  expect(room2.players.every((p) => p.mission === null), '默认关闭时没有任务');
+  expect(view(room2, room2.players[0].id).missionsEnabled === false, '视图里也是关闭状态');
 }
 
 console.log('\n回合数设置');

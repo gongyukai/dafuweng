@@ -637,7 +637,8 @@ button, input { font: inherit; color: inherit; }
 
 .side { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
 
-.panel.players { flex: 0 1 auto; max-height: 38%; display: flex; flex-direction: column; }
+.panel.players { flex: 0 0 auto; max-height: 38%; display: flex; flex-direction: column; }
+.panel.players.lobby-mode { max-height: 46%; }
 .player-list { overflow-y: auto; padding-right: 4px; scrollbar-width: thin; }
 .player-list::-webkit-scrollbar { width: 6px; }
 .player-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.14); border-radius: 3px; }

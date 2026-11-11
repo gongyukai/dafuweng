@@ -612,6 +612,7 @@ function renderPlayers(v) {
     </div>`;
   }).join('');
   $('#players').innerHTML = `<div class="act-head"><h3>玩家资产</h3><span>${v.players.length}/6</span></div><div class="player-list">${html}</div>`;
+  $('#players').classList.toggle('lobby-mode', v.phase === 'lobby');
 }
 
 function pieceGrid(v, me) {
@@ -629,10 +630,14 @@ function pieceGrid(v, me) {
 function actionLobby(v, isHost, me) {
   const bots = v.players.filter((p) => p.isBot);
   const rounds = [20, 35, 50].map((n) => `<button class="round-opt${v.roundLimit === n ? ' on' : ''}" data-act="setRounds" data-rounds="${n}" ${isHost ? '' : 'disabled'}>${n}</button>`).join('');
+  const on = !!v.missionsEnabled;
+  const missionBtns = `<button class="round-opt${on ? '' : ' on'}" data-act="setMissions" data-enabled="0" ${isHost ? '' : 'disabled'}>关（经典）</button>
+    <button class="round-opt${on ? ' on' : ''}" data-act="setMissions" data-enabled="1" ${isHost ? '' : 'disabled'}>开（+20%）</button>`;
   return `<div class="act-head"><h3>准备中</h3><span>${v.players.length}/6 人</span></div>
     <p class="act-msg">房间码 <b>${v.code}</b>，先选一个自己的棋子。人齐后房主开局。</p>
     ${pieceGrid(v, me)}
     <div class="rounds-row"><span>回合上限</span><div class="round-opts">${rounds}</div></div>
+    <div class="rounds-row"><span>秘密任务</span><div class="round-opts">${missionBtns}</div></div>
     ${isHost ? `<div class="btn-row">
       <button class="btn primary big" data-act="start" ${v.players.length < 2 ? 'disabled' : ''}>开始游戏</button>
       <button class="btn" data-act="addBot" ${v.players.length >= 6 ? 'disabled' : ''}>添加电脑</button>
@@ -1058,7 +1063,8 @@ $('#action').addEventListener('click', (e) => {
   const i = btn.dataset.i !== undefined ? Number(btn.dataset.i) : undefined;
   const id = btn.dataset.id;
   const piece = btn.dataset.piece;
-  S.net.send({ type, i, id, piece });
+  const enabled = btn.dataset.enabled;
+  S.net.send({ type, i, id, piece, enabled });
 });
 
 $('#logBody').addEventListener('scroll', (e) => {

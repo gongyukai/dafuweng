@@ -124,6 +124,7 @@ export function createRoom(code) {
     trade: null,
     event: null,
     missionWin: null,
+    missionsEnabled: false,
     winnerId: null,
     log: [],
     logSeq: 0,
@@ -352,7 +353,9 @@ export function startGame(room) {
   room.event = null;
   room.missionWin = null;
   const missionDeck = shuffle(MISSIONS, room.rng);
-  room.players.forEach((p, i) => { p.mission = missionDeck[i % missionDeck.length].id; });
+  room.players.forEach((p, i) => {
+    p.mission = room.missionsEnabled ? missionDeck[i % missionDeck.length].id : null;
+  });
   for (const p of room.players) {
     p.cash = START_CASH;
     p.pos = 0;
@@ -789,6 +792,7 @@ function missionMet(room, p) {
 }
 
 function checkMissions(room) {
+  if (!room.missionsEnabled) return;
   if (room.phase === 'lobby' || room.phase === 'ended') return;
   for (const p of room.players) {
     if (p.bankrupt || !p.mission || p.missionDone) continue;
@@ -1112,6 +1116,13 @@ function actInner(room, playerId, action) {
       pushLog(room, `本局回合上限设为 ${n}`, 'system');
       return ok();
     }
+    if (type === 'setMissions') {
+      if (p.id !== room.hostId) return fail('只有房主能设置胜利条件');
+      room.missionsEnabled = String(action.enabled) === '1' || action.enabled === true;
+      room.seq++;
+      pushLog(room, room.missionsEnabled ? '本局开启秘密任务（结算 +20%）' : '本局为经典胜负（无秘密任务）', 'system');
+      return ok();
+    }
     return fail('游戏还没有开始');
   }
 
@@ -1302,6 +1313,7 @@ export function view(room, youId) {
     event: room.event && room.event.round === room.round ? room.event : null,
     missionWin: room.missionWin,
     missionMinRound: MISSION_MIN_ROUND,
+    missionsEnabled: !!room.missionsEnabled,
     winnerId: room.winnerId,
     finalRank: room.finalRank || null,
     players: room.players.map((p) => ({
