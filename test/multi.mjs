@@ -61,8 +61,19 @@ expect(a.status === 200, '创建房间');
 const code = a.data.code;
 const tokens = { A: a.data.token };
 const ids = { A: a.data.playerId };
-for (const n of ['B', 'C', 'D', 'E', 'F']) {
-  const r = await post('/api/join', { code, name: `玩家${n}` });
+const b = await post('/api/join', { code, name: '玩家B', clientId: 'cid-B' });
+expect(b.status === 200, 'B 加入');
+tokens.B = b.data.token;
+ids.B = b.data.playerId;
+
+console.log('\n重复加入与重名');
+const again = await post('/api/join', { code, name: '玩家B', clientId: 'cid-B' });
+expect(again.status === 200 && again.data.playerId === ids.B, '同一 clientId 重复加入认回原玩家，不会新建');
+const dupName = await post('/api/join', { code, name: '玩家B', clientId: 'cid-other' });
+expect(dupName.status === 400 && /昵称/.test(dupName.data.err), '同名玩家被拒绝');
+
+for (const n of ['C', 'D', 'E', 'F']) {
+  const r = await post('/api/join', { code, name: `玩家${n}`, clientId: `cid-${n}` });
   expect(r.status === 200, `${n} 加入`);
   tokens[n] = r.data.token;
   ids[n] = r.data.playerId;

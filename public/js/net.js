@@ -3,7 +3,7 @@
 //   HostNet  —— 浏览器当主机，WebRTC 直连（GitHub Pages 可用）
 //   GuestNet —— 加入上面的房主
 //   LocalNet —— 单机人机对战，不联网
-import { createRoom, addPlayer, act, view, tickBots } from '../game/engine.js';
+import { createRoom, addPlayer, act, view, tickBots, tickStall } from '../game/engine.js';
 
 const PEER_PREFIX = 'dmj-cn-';
 const PEER_OPTS = {
@@ -29,6 +29,20 @@ export function randomCode() {
 // 会话存在 sessionStorage：同一个浏览器开多个标签页时，各自是独立玩家；
 // 刷新页面仍能凭 token 找回原来的座位。
 const sessKey = (code) => `dmj.sess.${code}`;
+
+// 同一个标签页的稳定标识：重复点「加入」/刷新都认成同一个玩家
+function getClientId() {
+  try {
+    let id = sessionStorage.getItem('dmj.cid');
+    if (!id) {
+      id = 'c' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+      sessionStorage.setItem('dmj.cid', id);
+    }
+    return id;
+  } catch {
+    return 'c' + Math.random().toString(36).slice(2);
+  }
+}
 
 export function saveSession(code, data) {
   try {
@@ -80,13 +94,13 @@ export class HttpNet {
   }
 
   async create(name) {
-    const r = await postJson('/api/create', { name });
+    const r = await postJson('/api/create', { name, clientId: getClientId() });
     this.use(r);
   }
 
   async join(code, name) {
     const sess = loadSession(code);
-    const r = await postJson('/api/join', { code, name, token: sess?.token });
+    const r = await postJson('/api/join', { code, name, token: sess?.token, clientId: getClientId() });
     this.use(r);
   }
 
@@ -140,7 +154,7 @@ class EngineHost {
   startBots() {
     this.botTimer = setInterval(() => {
       let changed = false;
-      try { changed = tickBots(this.room); } catch (e) { console.error(e); }
+      try { changed = tickBots(this.room) || tickStall(this.room); } catch (e) { console.error(e); }
       if (changed) {
         this.publish();
         if (this.onChange) this.onChange();
@@ -180,7 +194,7 @@ export class LocalNet {
 
   async create(name, opts = {}) {
     const room = createRoom('SOLO');
-    const me = addPlayer(room, name);
+    const me = addPlayer(room, name, { clientId: getClientId() });
     const bots = ['阿福', '小美', '老王', '阿强', '丽丽'].slice(0, Math.max(1, Math.min(5, opts.bots || 3)));
     for (const b of bots) addPlayer(room, b, { isBot: true });
     // 先停在大厅，让玩家挑棋子，再点开始
@@ -297,7 +311,7 @@ export class HostNet {
     });
 
     const room = createRoom(this.code);
-    const me = addPlayer(room, name);
+    const me = addPlayer(room, name, { clientId: getClientId() });
     this.playerId = me.player.id;
     saveSession(this.code, { token: me.player.token, playerId: me.player.id, host: true });
     this.h.onSelf({ code: this.code, playerId: this.playerId, token: me.player.token });
@@ -330,6 +344,10 @@ export class HostNet {
     const room = this.host.room;
     const meta = conn.metadata || {};
     let player = meta.token ? room.players.find((p) => p.token === meta.token) : null;
+    // 同一个标签页重复连进来：认回原来的座位，不新建玩家
+    if (!player && meta.clientId) {
+      player = room.players.find((p) => !p.isBot && p.clientId === meta.clientId) || null;
+    }
 
       if (player) {
         player.connected = true;
@@ -339,7 +357,7 @@ export class HostNet {
           setTimeout(() => { try { conn.close(); } catch { /* ignore */ } }, 500);
           return;
         }
-        const r = addPlayer(room, meta.name);
+        const r = addPlayer(room, meta.name, { clientId: meta.clientId });
         if (!r.ok) {
           conn.send({ t: 'err', msg: r.err });
           setTimeout(() => { try { conn.close(); } catch { /* ignore */ } }, 500);
@@ -419,7 +437,7 @@ export class GuestNet {
 
     const conn = this.peer.connect(PEER_PREFIX + code, {
       reliable: true,
-      metadata: { name, token: sess?.token },
+      metadata: { name, token: sess?.token, clientId: getClientId() },
     });
     this.conn = conn;
 

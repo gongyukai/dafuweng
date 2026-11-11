@@ -34,6 +34,9 @@ export const JAIL_FINE = 50;
 export const MAX_PLAYERS = 6;
 // 回合上限：防止所有人都不破产导致无限对局，到点按净资产判胜
 export const DEFAULT_ROUND_LIMIT = 50;
+// 回合超时：在线玩家 2 分钟，断线玩家 30 秒，避免幽灵玩家把对局卡死
+export const TURN_TIMEOUT_MS = 120000;
+export const TURN_TIMEOUT_OFFLINE_MS = 30000;
 const BOT_NAMES = ['阿福', '小美', '老王', '阿强', '丽丽'];
 
 // ---------------- 秘密任务 / 道具 / 事件 / 电脑性格 ----------------
@@ -139,6 +142,7 @@ export function createRoom(code) {
     round: 1,
     roundLimit: DEFAULT_ROUND_LIMIT,
     lastEventRound: 0,
+    turnStartedAt: null,
     createdAt: Date.now(),
     lastActionAt: Date.now(),
   };
@@ -197,9 +201,13 @@ export function addPlayer(room, name, opts = {}) {
   if (room.phase !== 'lobby') return { ok: false, err: '游戏已经开始，无法加入' };
   if (room.players.length >= MAX_PLAYERS) return { ok: false, err: '房间已满（最多 6 人）' };
   const clean = String(name || '').trim().slice(0, 10) || '玩家';
+  if (!opts.isBot && room.players.some((p) => !p.isBot && p.name === clean)) {
+    return { ok: false, err: '昵称已被占用，换一个名字' };
+  }
   const p = {
     id: uid('p'),
     token: opts.token || uid('t'),
+    clientId: opts.clientId || null,
     name: clean,
     color: COLORS[room.players.length % COLORS.length],
     piece: nextFreePiece(room),
@@ -345,6 +353,7 @@ export function startGame(room) {
   room.round = 1;
   room.roundLimit = room.roundLimit || DEFAULT_ROUND_LIMIT;
   room.lastEventRound = 0;
+  room.turnStartedAt = Date.now();
   room.dice = [0, 0];
   room.again = false;
   room.doubles = 0;
@@ -828,6 +837,7 @@ function nextTurn(room) {  if (room.phase === 'ended') return;
       if (i <= prev) room.round += 1;
       room.turn = i;
       room.phase = 'roll';
+      room.turnStartedAt = Date.now();
       room.dice = [0, 0];
       room.again = false;
       room.doubles = 0;
@@ -1060,8 +1070,29 @@ const BUILD_ACTIONS = new Set(['build', 'sellHouse', 'mortgage', 'unmortgage']);
 
 export function act(room, playerId, action) {
   const res = actInner(room, playerId, action);
-  if (res.ok && action && action.type !== 'chat') checkMissions(room);
+  if (res.ok && action && action.type !== 'chat') {
+    room.turnStartedAt = Date.now();
+    checkMissions(room);
+  }
   return res;
+}
+
+// 防止掉线/幽灵玩家卡死对局：超时自动跳过
+export function tickStall(room, now = Date.now()) {
+  if (room.phase === 'lobby' || room.phase === 'ended') return false;
+  const cur = currentPlayer(room);
+  if (!cur || cur.bankrupt) return false;
+  if (!room.turnStartedAt) { room.turnStartedAt = now; return false; }
+  const limit = cur.connected ? TURN_TIMEOUT_MS : TURN_TIMEOUT_OFFLINE_MS;
+  if (now - room.turnStartedAt < limit) return false;
+  pushLog(room, `${cur.name} 超时未行动，自动跳过`, 'system');
+  room.pendingBuy = null;
+  room.lastCard = null;
+  room.again = false;
+  room.dice = [0, 0];
+  nextTurn(room);
+  room.seq++;
+  return true;
 }
 
 function actInner(room, playerId, action) {

@@ -28,6 +28,7 @@ const S = {
   ready: false,
   trade: null,
   itemPending: null,
+  connecting: false,
 };
 
 const PIPS = {
@@ -169,7 +170,17 @@ const handlers = {
   },
 };
 
+function setConnecting(on) {
+  S.connecting = on;
+  for (const sel of ['#btnCreate', '#btnJoin', '#btnSolo']) {
+    const b = $(sel);
+    if (b) b.disabled = on;
+  }
+}
+
 async function createRoom() {
+  if (S.connecting) return;
+  setConnecting(true);
   const name = getName();
   setStatus('正在建房…', 'warn');
   const net = S.hasServer ? new HttpNet(handlers) : new HostNet(handlers);
@@ -182,12 +193,16 @@ async function createRoom() {
     net.close();
     toast(e.message);
     setStatus('建房失败', 'bad');
+  } finally {
+    setConnecting(false);
   }
 }
 
 async function joinRoom(code, silent = false) {
+  if (S.connecting) return;
   const c = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
   if (c.length !== 4) { if (!silent) toast('房间码是 4 位字母数字'); return; }
+  setConnecting(true);
   const name = getName();
   setStatus('正在加入…', 'warn');
   const net = S.hasServer ? new HttpNet(handlers) : new GuestNet(handlers);
@@ -199,10 +214,14 @@ async function joinRoom(code, silent = false) {
     S.net = null;
     net.close();
     if (!silent) { toast(e.message); setStatus('加入失败', 'bad'); }
+  } finally {
+    setConnecting(false);
   }
 }
 
 async function startSolo() {
+  if (S.connecting) return;
+  setConnecting(true);
   const name = getName();
   setStatus('创建单机对局…', 'warn');
   const net = new LocalNet(handlers);
@@ -216,6 +235,8 @@ async function startSolo() {
   } catch (e) {
     S.net = null;
     toast(e.message);
+  } finally {
+    setConnecting(false);
   }
 }
 

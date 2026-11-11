@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { createRoom, addPlayer, act, view, tickBots } from './public/game/engine.js';
+import { createRoom, addPlayer, act, view, tickBots, tickStall } from './public/game/engine.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -120,7 +120,7 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       const code = newCode();
       const room = createRoom(code);
-      const r = addPlayer(room, body.name);
+      const r = addPlayer(room, body.name, { clientId: String(body.clientId || '').slice(0, 40) });
       if (!r.ok) return json(res, 400, r);
       const entry = { room, clients: new Set(), lastAct: Date.now() };
       rooms.set(code, entry);
@@ -140,9 +140,18 @@ const server = http.createServer(async (req, res) => {
         existing.connected = true;
         return json(res, 200, { code: room.code, token: body.token, playerId: existing.id });
       }
+      // 同一个浏览器标签页重复点「加入」：认同一个玩家，不再新建
+      const cid = String(body.clientId || '').slice(0, 40);
+      if (cid) {
+        const sameClient = room.players.find((p) => !p.isBot && p.clientId === cid);
+        if (sameClient) {
+          sameClient.connected = true;
+          return json(res, 200, { code: room.code, token: sameClient.token, playerId: sameClient.id });
+        }
+      }
       if (room.phase !== 'lobby') return json(res, 400, { ok: false, err: '这局已经开始了' });
 
-      const r = addPlayer(room, body.name);
+      const r = addPlayer(room, body.name, { clientId: cid });
       if (!r.ok) return json(res, 400, r);
       tokens.set(r.player.token, { code: room.code, playerId: r.player.id });
       broadcast(entry);
@@ -204,7 +213,7 @@ setInterval(() => {
   for (const entry of rooms.values()) {
     let changed = false;
     try {
-      changed = tickBots(entry.room);
+      changed = tickBots(entry.room) || tickStall(entry.room);
     } catch (e) {
       console.error('bot error', e.message);
     }

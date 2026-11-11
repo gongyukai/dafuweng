@@ -1,4 +1,4 @@
-﻿// 双浏览器（真实界面）联机交易测试：建房、加入、开局、发起交易、对方接受、双方现金同步
+// 双浏览器（真实界面）联机交易测试：建房、加入、开局、发起交易、对方接受、双方现金同步
 const CDP = process.env.CDP || 'http://127.0.0.1:9222';
 const BASE = process.env.BASE || 'http://127.0.0.1:3210';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -64,10 +64,13 @@ console.log(`✅ 房主建房：${code}`);
 await guest.send('Page.navigate', { url: `${BASE}/?room=${code}` });
 await guest.until("document.readyState==='complete' && !!document.querySelector('#btnJoin')", '访客页面加载');
 await guest.ev("document.querySelector('#nameInput').value='访客乙'");
-await guest.ev("document.querySelector('#btnJoin').click()");
+// 连点三次「加入」，验证不会生成幽灵玩家
+await guest.ev("(() => { const b = document.querySelector('#btnJoin'); b.click(); b.click(); b.click(); })()");
 await guest.until("document.querySelectorAll('.prow').length>=2", '访客看到两名玩家');
 await host.until("document.querySelectorAll('.prow').length>=2", '房主看到两名玩家');
-console.log('✅ 访客加入，双方都看到 2 名玩家');
+const rows = await host.ev("document.querySelectorAll('.prow').length");
+if (rows !== 2) throw new Error(`连点加入后应只有 2 名玩家，实际 ${rows}`);
+console.log('✅ 访客加入（连点 3 次只生成 1 名玩家）');
 
 // 开局
 await host.ev("document.querySelector('button[data-act=\"start\"]').click()");

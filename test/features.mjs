@@ -1,6 +1,6 @@
 // 新玩法单测：回合设置、秘密任务、道具、全场事件、电脑性格
 import {
-  createRoom, addPlayer, startGame, act, view, PERSONA_IDS, MISSIONS,
+  createRoom, addPlayer, startGame, act, view, PERSONA_IDS, MISSIONS, tickStall,
 } from '../public/game/engine.js';
 
 let passed = 0;
@@ -213,6 +213,22 @@ console.log('\n电脑性格');
   expect(PERSONA_IDS.includes(bot.persona), '机器人被分配了性格');
   const human = addPlayer(room, '真人').player;
   expect(human.persona === null, '真人没有电脑性格');
+}
+
+console.log('\n回合超时跳过（防幽灵玩家卡死）');
+{
+  const { room } = makeGame(2);
+  room.turn = 0;
+  room.phase = 'roll';
+  room.turnStartedAt = Date.now() - 1000;
+  expect(!tickStall(room), '没超时不会跳过');
+  room.turnStartedAt = Date.now() - 130000;
+  expect(tickStall(room) && room.turn === 1, '在线玩家 2 分钟超时被跳过');
+  room.players[1].connected = false;
+  room.turn = 1;
+  room.phase = 'roll';
+  room.turnStartedAt = Date.now() - 31000;
+  expect(tickStall(room) && room.turn === 0, '断线玩家 30 秒后跳过');
 }
 
 console.log(`\n🎉 新玩法单测全部通过（${passed} 项断言）`);
