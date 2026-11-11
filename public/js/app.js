@@ -338,14 +338,21 @@ function layoutToken(t, animate = true) {
 async function walkToken(t, from, to, v) {
   const dist = (to - from + 40) % 40;
   if (dist === 0) { layoutToken(t); return; }
+  const p = S.view && S.view.players.find((x) => x.id === t.el.dataset.pid);
+  // 入狱是“押送”，不能按向前走的格数算：从 38 格进监狱否则会绕棋盘走 12 格
+  const jailMove = !!(p && p.inJail && to === 10 && from !== 10);
   t.walking = true;
-  if (dist > 12) {
-    // 传送（入狱、卡片跳跃）
-    t.el.classList.add('jump');
+  if (jailMove || dist > 12) {
+    // 传送：先在原地淡出，再淡入到目标格，避免“瞬移闪一下”
+    t.el.classList.add('fade-out');
+    await sleep(170);
     t.pos = to;
     layoutToken(t);
-    await sleep(520);
-    t.el.classList.remove('jump');
+    await sleep(70);
+    t.el.classList.remove('fade-out');
+    await sleep(320);
+    const tile = document.querySelector(`.tile[data-i="${to}"]`);
+    if (tile) { tile.classList.add('landed'); setTimeout(() => tile.classList.remove('landed'), 700); }
   } else {
     t.el.classList.add('walking');
     for (let i = 1; i <= dist; i++) {

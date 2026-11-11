@@ -1,4 +1,4 @@
-// 棋子定位回归测试：进监狱（传送）和普通移动后，棋子必须落在正确的格子上
+﻿// 棋子定位回归测试：进监狱（传送）和普通移动后，棋子必须落在正确的格子上
 const CDP = process.env.CDP || 'http://127.0.0.1:9222';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -33,6 +33,8 @@ const assert = (c, m) => { if (!c) throw new Error('断言失败：' + m); };
 await ev("document.querySelector('button[data-act=\"start\"]')?.click()");
 await sleep(600);
 assert(await ev("!!window.__dmj"), '需要带 ?dev=1 打开页面');
+// 冻结电脑玩家，避免测试期间它自己走动，干扰定位判断
+await ev(`(() => { const S = window.__dmj; S.net.host.room.players.forEach((p) => { p.isBot = false; }); })()`);
 
 async function tokenToTileDistance(pid, tileIdx) {
   return ev(`(() => {
@@ -67,6 +69,17 @@ d = await tokenToTileDistance(pid, 10);
 assert(d >= 0 && d < tileSize * 0.5, `入狱后棋子应在监狱格，偏差 ${d}px`);
 console.log(`✅ 入狱传送定位正确（偏差 ${d}px）`);
 
+// 2b. 从远处入狱必须直接传送，不能绕棋盘走（旧 bug：38 → 10 被算成走 12 格）
+await ev(`(() => { const S = window.__dmj; const room = S.net.host.room;
+  const p = room.players[1]; p.inJail = false; p.pos = 38; S.net.host.publish(); })()`);
+await sleep(1200);
+await ev(`(() => { const S = window.__dmj; const room = S.net.host.room;
+  const p = room.players[1]; p.pos = 10; p.inJail = true; S.net.host.publish(); })()`);
+await sleep(700);
+d = await tokenToTileDistance(pid, 10);
+assert(d >= 0 && d < tileSize * 0.5, `远处入狱应立即传送到监狱格，实际偏差 ${d}px`);
+console.log(`✅ 远处入狱直接传送（偏差 ${d}px，没有绕圈）`);
+
 // 3. 再从监狱掷到 23（长距离，属于传送范围）
 await ev(`(() => { const S = window.__dmj; const room = S.net.host.room;
   const p = room.players[1]; p.pos = 23; p.inJail = false; S.net.host.publish(); })()`);
@@ -77,3 +90,4 @@ console.log(`✅ 长距离跳动定位正确（偏差 ${d}px）`);
 
 console.log('\n🎉 棋子定位测试全部通过');
 process.exit(0);
+

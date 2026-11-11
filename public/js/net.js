@@ -145,7 +145,7 @@ class EngineHost {
         this.publish();
         if (this.onChange) this.onChange();
       }
-    }, 900);
+    }, 1500);
   }
 
   apply(action) {

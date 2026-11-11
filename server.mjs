@@ -199,7 +199,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-// 机器人回合驱动
+// 机器人回合驱动（1.5 秒一步，留出看动画和字幕的时间）
 setInterval(() => {
   for (const entry of rooms.values()) {
     let changed = false;
@@ -210,7 +210,7 @@ setInterval(() => {
     }
     if (changed) broadcast(entry);
   }
-}, 900);
+}, 1500);
 
 // 心跳，防止代理断开长连接
 setInterval(() => {
