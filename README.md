@@ -165,7 +165,10 @@ node test/sim.mjs 100     # 规则引擎：100 局机器人互打，检查不崩
 node test/e2e.mjs         # 需要先 node server.mjs，验证建房/加入/SSE/重连
 node test/tokens.mjs      # 棋子定位：普通移动与入狱传送后必须落在正确格子（需要 ?dev=1）
 node test/ui.mjs          # CDP 驱动真实浏览器：选棋子、开局、掷骰、动画、聊天、规则弹窗
+node test/multi.mjs       # 6 人 HTTP 联机：满员、权限、三方同步、聊天、交易、重连（需要服务端）
+node test/multi-ui.mjs    # 双浏览器界面联机：建房→加入→开局→发起交易→接受→现金同步
 node test/p2p.mjs         # 双浏览器 WebRTC 房主模式
+node test/p2p3.mjs        # 公网三人 P2P：两人观战同步、访客刷新重连
 ```
 
 `ui.mjs` / `p2p.mjs` 需要一个开了远程调试的 Edge：
