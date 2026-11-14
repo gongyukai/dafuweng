@@ -1060,7 +1060,7 @@ function setTileFont() {
   if (!board) return;
   const w = board.clientWidth;
   if (!w) return;
-  board.style.setProperty('--tile-fs', `${Math.max(7, Math.round(w / 50))}px`);
+  board.style.setProperty('--tile-fs', `${Math.max(8, Math.round(w / 45))}px`);
 }
 
 // ---------------- 交互 ----------------

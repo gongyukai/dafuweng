@@ -14,7 +14,7 @@
   --danger: #e2574c;
   --ok: #4fb37a;
   --radius: 16px;
-  --tile-fs: 16px;
+  --tile-fs: 17px;
 }
 
 * { box-sizing: border-box; }
@@ -124,8 +124,8 @@ button, input { font: inherit; color: inherit; }
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 6px 14px;
-  min-height: 46px;
+  padding: 4px 14px;
+  min-height: 40px;
   border-bottom: 1px solid var(--line);
   background: rgba(3, 16, 12, 0.5);
   backdrop-filter: blur(8px);
@@ -162,9 +162,9 @@ button, input { font: inherit; color: inherit; }
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 222px minmax(0, 1fr) 412px;
-  gap: 10px;
-  padding: 10px 12px 12px;
+  grid-template-columns: 206px minmax(0, 1fr) 400px;
+  gap: 8px;
+  padding: 6px 8px 8px;
 }
 
 .panel {
@@ -264,13 +264,13 @@ button, input { font: inherit; color: inherit; }
 
 .board {
   position: relative;
-  width: min(100%, calc(100dvh - 64px));
+  width: min(100%, calc(100dvh - 56px));
   aspect-ratio: 1 / 1;
   display: grid;
-  grid-template-columns: 1.4fr repeat(9, 1fr) 1.4fr;
-  grid-template-rows: 1.4fr repeat(9, 1fr) 1.4fr;
+  grid-template-columns: repeat(11, 1fr);
+  grid-template-rows: repeat(11, 1fr);
   background: linear-gradient(160deg, #fbf6e9, #efe2c6);
-  border: 9px solid #0a2a20;
+  border: 6px solid #0a2a20;
   border-radius: 12px;
   box-shadow:
     0 0 0 2px rgba(233, 196, 134, 0.42),
@@ -367,11 +367,11 @@ button, input { font: inherit; color: inherit; }
   line-height: 1.5;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
-.tile.side-bottom { padding-top: 15%; padding-bottom: 22%; }
-.tile.side-top { padding-bottom: 15%; padding-top: 22%; }
-.tile.side-left { padding-right: 14%; padding-bottom: 22%; }
-.tile.side-right { padding-left: 14%; padding-bottom: 22%; }
-.tile .ico { width: 1.85em; height: 1.85em; object-fit: contain; z-index: 1; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.12)); }
+.tile.side-bottom { padding: 8% 2% 10%; }
+.tile.side-top { padding: 10% 2% 8%; }
+.tile.side-left { padding: 8% 13% 10% 4%; }
+.tile.side-right { padding: 8% 4% 10% 13%; }
+.tile .ico { width: 1.65em; height: 1.65em; object-fit: contain; z-index: 1; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.12)); }
 
 .tile.corner { background: linear-gradient(160deg, #fdf6e4, #f0dfbd); }
 .tile.corner .ico { width: 2.3em; height: 2.3em; }
@@ -427,8 +427,9 @@ button, input { font: inherit; color: inherit; }
 
 .center {
   grid-area: 2 / 2 / 11 / 11;
-  margin: 3.2%;
-  border: 1px solid rgba(233, 196, 134, 0.32);
+  margin: 6%;
+  border: 1px solid rgba(233, 196, 134, 0.36);
+  box-shadow: inset 0 0 0 1px rgba(10, 42, 32, 0.5), 0 0 0 1px rgba(233, 196, 134, 0.18);
   position: relative;
   background:
     radial-gradient(circle at 50% 20%, #1f5d47 0%, #0b3125 68%),
