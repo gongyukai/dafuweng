@@ -1226,7 +1226,7 @@ function hostPanelHTML() {
       </button>`;
     }).join('');
     return `<h2 class="trade-title">土地归属</h2>
-      <p class="trade-hint">点一块地就归到 <b>${esc(t.name)}</b> 名下；点同一块可以收回。</p>
+      <p class="trade-hint">点一块地就归到 <b>${esc(t.name)}</b> 名下；要收回用「清空地产」。</p>
       <div class="host-tiles">${tiles}</div>
       <div class="btn-row"><button class="btn" data-host="back">返回</button><button class="btn" id="modalClose">关闭</button></div>`;
   }

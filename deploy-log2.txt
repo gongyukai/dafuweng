@@ -1,0 +1,293 @@
+﻿2026-11-14T18:01:21.6186326Z Current runner version: '2.338.2'
+2026-11-14T18:01:21.6202885Z ##[group]Runner Image Provisioner
+2026-11-14T18:01:21.6203420Z Hosted Compute Agent
+2026-11-14T18:01:21.6203814Z Version: 20261103.629
+2026-11-14T18:01:21.6204215Z Commit: 15dbd9ccb5dbf34fae002b6ed1a2670f52df37bc
+2026-11-14T18:01:21.6204622Z Build Date: 2026-11-03T17:26:59Z
+2026-11-14T18:01:21.6205284Z Worker ID: {d0f60252-141a-4cb0-a7ef-41038a2ee053}
+2026-11-14T18:01:21.6205692Z Region: centralus
+2026-11-14T18:01:21.6206075Z Cloud: Azure
+2026-11-14T18:01:21.6206418Z ##[endgroup]
+2026-11-14T18:01:21.6207193Z ##[group]Operating System
+2026-11-14T18:01:21.6207602Z Ubuntu
+2026-11-14T18:01:21.6207908Z 26.04.1
+2026-11-14T18:01:21.6208229Z LTS
+2026-11-14T18:01:21.6208565Z ##[endgroup]
+2026-11-14T18:01:21.6208880Z ##[group]Runner Image
+2026-11-14T18:01:21.6209256Z Image: ubuntu-26.04
+2026-11-14T18:01:21.6209612Z Version: 20261111.196.1
+2026-11-14T18:01:21.6210372Z Included Software: https://github.com/actions/runner-images/blob/ubuntu26/20261111.196/images/ubuntu/Ubuntu2604-Readme.md
+2026-11-14T18:01:21.6211307Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu26%2F20261111.196
+2026-11-14T18:01:21.6211888Z ##[endgroup]
+2026-11-14T18:01:21.6212797Z ##[group]GITHUB_TOKEN Permissions
+2026-11-14T18:01:21.6214173Z Contents: read
+2026-11-14T18:01:21.6214504Z Metadata: read
+2026-11-14T18:01:21.6215074Z Pages: write
+2026-11-14T18:01:21.6215435Z ##[endgroup]
+2026-11-14T18:01:21.6216739Z Secret source: Actions
+2026-11-14T18:01:21.6217367Z Cache mode: write
+2026-11-14T18:01:21.6217767Z Prepare workflow directory
+2026-11-14T18:01:21.6419368Z Prepare all required actions
+2026-11-14T18:01:21.6456318Z Getting action download info
+2026-11-14T18:01:21.8759448Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-11-14T18:01:21.9532629Z Download action repository 'actions/configure-pages@v5' (SHA:983d7736d9b0ae728b81ab479565c72886d7745b)
+2026-11-14T18:01:22.2533013Z Download action repository 'actions/upload-pages-artifact@v3' (SHA:56afc609e74202658d3ffba0e8f6dda462b719fa)
+2026-11-14T18:01:22.3941241Z Download action repository 'actions/deploy-pages@v4' (SHA:d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e)
+2026-11-14T18:01:22.8620321Z Getting action download info
+2026-11-14T18:01:22.9730520Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-11-14T18:01:23.0979240Z Complete job name: deploy
+2026-11-14T18:01:23.1476418Z ##[group]Run actions/checkout@v4
+2026-11-14T18:01:23.1476848Z with:
+2026-11-14T18:01:23.1477102Z   repository: gongyukai/dafuweng
+2026-11-14T18:01:23.1479064Z   token: ***
+2026-11-14T18:01:23.1479304Z   ssh-strict: true
+2026-11-14T18:01:23.1479556Z   ssh-user: git
+2026-11-14T18:01:23.1479809Z   persist-credentials: true
+2026-11-14T18:01:23.1480079Z   clean: true
+2026-11-14T18:01:23.1480331Z   sparse-checkout-cone-mode: true
+2026-11-14T18:01:23.1480635Z   fetch-depth: 1
+2026-11-14T18:01:23.1480889Z   fetch-tags: false
+2026-11-14T18:01:23.1481168Z   show-progress: true
+2026-11-14T18:01:23.1481435Z   lfs: false
+2026-11-14T18:01:23.1481672Z   submodules: false
+2026-11-14T18:01:23.1481931Z   set-safe-directory: true
+2026-11-14T18:01:23.1482216Z   allow-unsafe-pr-checkout: false
+2026-11-14T18:01:23.1482630Z ##[endgroup]
+2026-11-14T18:01:23.3756923Z Syncing repository: gongyukai/dafuweng
+2026-11-14T18:01:23.3758259Z ##[group]Getting Git version info
+2026-11-14T18:01:23.3758941Z Working directory is '/home/runner/work/dafuweng/dafuweng'
+2026-11-14T18:01:23.3759671Z [command]/usr/bin/git version
+2026-11-14T18:01:23.3774569Z git version 2.56.1
+2026-11-14T18:01:23.3785716Z ##[endgroup]
+2026-11-14T18:01:23.3794161Z Temporarily overriding HOME='/home/runner/work/_temp/1a6d0cde-4559-4b58-a82f-d1be58252734' before making global git config changes
+2026-11-14T18:01:23.3795387Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-14T18:01:23.3797339Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/dafuweng/dafuweng
+2026-11-14T18:01:23.3855685Z Deleting the contents of '/home/runner/work/dafuweng/dafuweng'
+2026-11-14T18:01:23.3856740Z ##[group]Initializing the repository
+2026-11-14T18:01:23.3857433Z [command]/usr/bin/git init /home/runner/work/dafuweng/dafuweng
+2026-11-14T18:01:23.3964644Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-11-14T18:01:23.3966001Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-11-14T18:01:23.3967166Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-11-14T18:01:23.3968075Z hint: call:
+2026-11-14T18:01:23.3968872Z hint:
+2026-11-14T18:01:23.3969473Z hint: 	git config --global init.defaultBranch <name>
+2026-11-14T18:01:23.3970044Z hint:
+2026-11-14T18:01:23.3970513Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-11-14T18:01:23.3971195Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-11-14T18:01:23.3971760Z hint:
+2026-11-14T18:01:23.3972193Z hint: 	git branch -m <name>
+2026-11-14T18:01:23.3972553Z hint:
+2026-11-14T18:01:23.3973212Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-11-14T18:01:23.3975483Z Initialized empty Git repository in /home/runner/work/dafuweng/dafuweng/.git/
+2026-11-14T18:01:23.3983738Z [command]/usr/bin/git remote add origin https://github.com/gongyukai/dafuweng
+2026-11-14T18:01:23.4029653Z ##[endgroup]
+2026-11-14T18:01:23.4030484Z ##[group]Disabling automatic garbage collection
+2026-11-14T18:01:23.4032027Z [command]/usr/bin/git config --local gc.auto 0
+2026-11-14T18:01:23.4060768Z ##[endgroup]
+2026-11-14T18:01:23.4061527Z ##[group]Setting up auth
+2026-11-14T18:01:23.4065468Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-14T18:01:23.4093719Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-14T18:01:23.4478471Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-14T18:01:23.4505249Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-14T18:01:23.4712488Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-14T18:01:23.4738721Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-14T18:01:23.4946483Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-11-14T18:01:23.4978709Z ##[endgroup]
+2026-11-14T18:01:23.4979569Z ##[group]Fetching the repository
+2026-11-14T18:01:23.4985580Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +6cdfe4c2feefb20e16030a48227a710d084326ce:refs/remotes/origin/main
+2026-11-14T18:01:24.1036373Z From https://github.com/gongyukai/dafuweng
+2026-11-14T18:01:24.1038209Z  * [new ref]         6cdfe4c2feefb20e16030a48227a710d084326ce -> origin/main
+2026-11-14T18:01:24.1047536Z ##[endgroup]
+2026-11-14T18:01:24.1048627Z ##[group]Determining the checkout info
+2026-11-14T18:01:24.1049680Z ##[endgroup]
+2026-11-14T18:01:24.1051781Z [command]/usr/bin/git sparse-checkout disable
+2026-11-14T18:01:24.1103319Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-11-14T18:01:24.1129749Z ##[group]Checking out the ref
+2026-11-14T18:01:24.1132481Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2026-11-14T18:01:24.1308853Z Switched to a new branch 'main'
+2026-11-14T18:01:24.1311926Z branch 'main' set up to track 'origin/main'.
+2026-11-14T18:01:24.1374173Z ##[endgroup]
+2026-11-14T18:01:24.1375843Z [command]/usr/bin/git log -1 --format=%H
+2026-11-14T18:01:24.1386887Z 6cdfe4c2feefb20e16030a48227a710d084326ce
+2026-11-14T18:01:24.1589050Z ##[group]Run actions/configure-pages@v5
+2026-11-14T18:01:24.1589521Z with:
+2026-11-14T18:01:24.1589787Z   enablement: true
+2026-11-14T18:01:24.1594694Z   token: ***
+2026-11-14T18:01:24.1595068Z ##[endgroup]
+2026-11-14T18:01:24.5933985Z ##[group]Run actions/upload-pages-artifact@v3
+2026-11-14T18:01:24.5934762Z with:
+2026-11-14T18:01:24.5935425Z   path: public
+2026-11-14T18:01:24.5935958Z   name: github-pages
+2026-11-14T18:01:24.5936512Z   retention-days: 1
+2026-11-14T18:01:24.5937033Z env:
+2026-11-14T18:01:24.5937516Z   GITHUB_PAGES: true
+2026-11-14T18:01:24.5938053Z ##[endgroup]
+2026-11-14T18:01:24.5983557Z ##[start-action display=Archive artifact;id=__actions_upload-pages-artifact.__run]
+2026-11-14T18:01:24.6034813Z ##[group]Run echo ::group::Archive artifact
+2026-11-14T18:01:24.6035839Z [36;1mecho ::group::Archive artifact[0m
+2026-11-14T18:01:24.6036473Z [36;1mtar \[0m
+2026-11-14T18:01:24.6037024Z [36;1m  --dereference --hard-dereference \[0m
+2026-11-14T18:01:24.6037757Z [36;1m  --directory "$INPUT_PATH" \[0m
+2026-11-14T18:01:24.6038438Z [36;1m  -cvf "$RUNNER_TEMP/artifact.tar" \[0m
+2026-11-14T18:01:24.6039114Z [36;1m  --exclude=.git \[0m
+2026-11-14T18:01:24.6039716Z [36;1m  --exclude=.github \[0m
+2026-11-14T18:01:24.6040277Z [36;1m  .[0m
+2026-11-14T18:01:24.6040752Z [36;1mecho ::endgroup::[0m
+2026-11-14T18:01:24.6114357Z shell: /usr/bin/sh -e {0}
+2026-11-14T18:01:24.6115059Z env:
+2026-11-14T18:01:24.6115501Z   GITHUB_PAGES: true
+2026-11-14T18:01:24.6116000Z   INPUT_PATH: public
+2026-11-14T18:01:24.6116497Z ##[endgroup]
+2026-11-14T18:01:24.6196328Z ##[group]Archive artifact
+2026-11-14T18:01:24.6206189Z ./
+2026-11-14T18:01:24.6206860Z ./index.html
+2026-11-14T18:01:24.6207539Z ./style.css
+2026-11-14T18:01:24.6208219Z ./game/
+2026-11-14T18:01:24.6208848Z ./game/board.js
+2026-11-14T18:01:24.6209534Z ./game/engine.js
+2026-11-14T18:01:24.6210223Z ./game/cards.js
+2026-11-14T18:01:24.6210888Z ./assets/
+2026-11-14T18:01:24.6211571Z ./assets/twemoji/
+2026-11-14T18:01:24.6212302Z ./assets/twemoji/1f372.svg
+2026-11-14T18:01:24.6213118Z ./assets/twemoji/1f303.svg
+2026-11-14T18:01:24.6213936Z ./assets/twemoji/1f431.svg
+2026-11-14T18:01:24.6214753Z ./assets/twemoji/1f375.svg
+2026-11-14T18:01:24.6215700Z ./assets/twemoji/1f3fa.svg
+2026-11-14T18:01:24.6216509Z ./assets/twemoji/1f427.svg
+2026-11-14T18:01:24.6217320Z ./assets/twemoji/1f3d9.svg
+2026-11-14T18:01:24.6218131Z ./assets/twemoji/1f6ce.svg
+2026-11-14T18:01:24.6218944Z ./assets/twemoji/1f3e2.svg
+2026-11-14T18:01:24.6219751Z ./assets/twemoji/1f4a7.svg
+2026-11-14T18:01:24.6220561Z ./assets/twemoji/1f3c1.svg
+2026-11-14T18:01:24.6221388Z ./assets/twemoji/1f309.svg
+2026-11-14T18:01:24.6222077Z ./assets/twemoji/1f512.svg
+2026-11-14T18:01:24.6222625Z ./assets/twemoji/1f3d6.svg
+2026-11-14T18:01:24.6223178Z ./assets/twemoji/1f695.svg
+2026-11-14T18:01:24.6223939Z ./assets/twemoji/1f6a8.svg
+2026-11-14T18:01:24.6225000Z ./assets/twemoji/1f338.svg
+2026-11-14T18:01:24.6225985Z ./assets/twemoji/1f6b0.svg
+2026-11-14T18:01:24.6226877Z ./assets/twemoji/1f3af.svg
+2026-11-14T18:01:24.6227705Z ./assets/twemoji/1f4a1.svg
+2026-11-14T18:01:24.6228555Z ./assets/twemoji/1f694.svg
+2026-11-14T18:01:24.6229405Z ./assets/twemoji/1f3db.svg
+2026-11-14T18:01:24.6230267Z ./assets/twemoji/1f680.svg
+2026-11-14T18:01:24.6231170Z ./assets/twemoji/1f3ef.svg
+2026-11-14T18:01:24.6232027Z ./assets/twemoji/2693.svg
+2026-11-14T18:01:24.6232973Z ./assets/twemoji/1f3a9.svg
+2026-11-14T18:01:24.6233897Z ./assets/twemoji/1f689.svg
+2026-11-14T18:01:24.6235099Z ./assets/twemoji/1f40e.svg
+2026-11-14T18:01:24.6235914Z ./assets/twemoji/1f43c.svg
+2026-11-14T18:01:24.6236732Z ./assets/twemoji/1f697.svg
+2026-11-14T18:01:24.6237302Z ./assets/twemoji/1f996.svg
+2026-11-14T18:01:24.6237862Z ./assets/twemoji/1f682.svg
+2026-11-14T18:01:24.6238423Z ./assets/twemoji/1f3b2.svg
+2026-11-14T18:01:24.6239009Z ./assets/twemoji/1f3ed.svg
+2026-11-14T18:01:24.6239572Z ./assets/twemoji/1f98a.svg
+2026-11-14T18:01:24.6240141Z ./assets/twemoji/26f5.svg
+2026-11-14T18:01:24.6240875Z ./assets/twemoji/1f681.svg
+2026-11-14T18:01:24.6241439Z ./assets/twemoji/1f5fc.svg
+2026-11-14T18:01:24.6241999Z ./assets/twemoji/1f3a1.svg
+2026-11-14T18:01:24.6242560Z ./assets/twemoji/1f336.svg
+2026-11-14T18:01:24.6243122Z ./assets/twemoji/1f3b0.svg
+2026-11-14T18:01:24.6243820Z ./assets/twemoji/1f3e0.svg
+2026-11-14T18:01:24.6244379Z ./assets/twemoji/1f3c6.svg
+2026-11-14T18:01:24.6245134Z ./assets/twemoji/1f3e8.svg
+2026-11-14T18:01:24.6245692Z ./assets/twemoji/2753.svg
+2026-11-14T18:01:24.6246247Z ./assets/twemoji/1f4b8.svg
+2026-11-14T18:01:24.6246810Z ./assets/twemoji/1f4b0.svg
+2026-11-14T18:01:24.6247376Z ./assets/twemoji/1f3d7.svg
+2026-11-14T18:01:24.6247937Z ./assets/twemoji/1f381.svg
+2026-11-14T18:01:24.6248492Z ./assets/twemoji/1f17f.svg
+2026-11-14T18:01:24.6249040Z ./assets/ui/
+2026-11-14T18:01:24.6249529Z ./assets/ui/sack-dollar.svg
+2026-11-14T18:01:24.6250145Z ./assets/ui/hourglass-half.svg
+2026-11-14T18:01:24.6250716Z ./assets/ui/coins.svg
+2026-11-14T18:01:24.6251227Z ./assets/ui/hammer.svg
+2026-11-14T18:01:24.6251753Z ./assets/ui/bullseye.svg
+2026-11-14T18:01:24.6252293Z ./assets/ui/house-crack.svg
+2026-11-14T18:01:24.6252909Z ./assets/ui/hand-holding-dollar.svg
+2026-11-14T18:01:24.6253523Z ./assets/ui/handshake.svg
+2026-11-14T18:01:24.6254069Z ./assets/ui/bolt.svg
+2026-11-14T18:01:24.6254582Z ./assets/ui/chart-line.svg
+2026-11-14T18:01:24.6255326Z ./assets/ui/shield-halved.svg
+2026-11-14T18:01:24.6255895Z ./assets/ui/dice-d6.svg
+2026-11-14T18:01:24.6256441Z ./assets/ui/train-subway.svg
+2026-11-14T18:01:24.6257025Z ./assets/ui/scale-balanced.svg
+2026-11-14T18:01:24.6257616Z ./assets/ui/flag-checkered.svg
+2026-11-14T18:01:24.6258168Z ./js/
+2026-11-14T18:01:24.6258594Z ./js/app.js
+2026-11-14T18:01:24.6259035Z ./js/net.js
+2026-11-14T18:01:24.6259870Z ##[endgroup]
+2026-11-14T18:01:24.6271924Z ##[end-action id=__actions_upload-pages-artifact.__run;outcome=success;conclusion=success;duration_ms=28]
+2026-11-14T18:01:24.6277266Z ##[start-action display=Archive artifact;id=__actions_upload-pages-artifact.__run_2]
+2026-11-14T18:01:24.6285214Z ##[end-action id=__actions_upload-pages-artifact.__run_2;outcome=skipped;conclusion=skipped;duration_ms=0]
+2026-11-14T18:01:24.6289470Z ##[start-action display=Archive artifact;id=__actions_upload-pages-artifact.__run_3]
+2026-11-14T18:01:24.6296018Z ##[end-action id=__actions_upload-pages-artifact.__run_3;outcome=skipped;conclusion=skipped;duration_ms=0]
+2026-11-14T18:01:24.6299746Z ##[start-action display=Upload artifact;id=__actions_upload-pages-artifact.upload-artifact]
+2026-11-14T18:01:24.6368229Z ##[group]Run actions/upload-artifact@v4
+2026-11-14T18:01:24.6368851Z with:
+2026-11-14T18:01:24.6369289Z   name: github-pages
+2026-11-14T18:01:24.6369852Z   path: /home/runner/work/_temp/artifact.tar
+2026-11-14T18:01:24.6370495Z   retention-days: 1
+2026-11-14T18:01:24.6370996Z   if-no-files-found: error
+2026-11-14T18:01:24.6371543Z   compression-level: 6
+2026-11-14T18:01:24.6372053Z   overwrite: false
+2026-11-14T18:01:24.6372567Z   include-hidden-files: false
+2026-11-14T18:01:24.6373129Z env:
+2026-11-14T18:01:24.6373571Z   GITHUB_PAGES: true
+2026-11-14T18:01:24.6374069Z ##[endgroup]
+2026-11-14T18:01:24.7460503Z (node:2222) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-14T18:01:24.7462103Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-14T18:01:24.7491533Z With the provided path, there will be 1 file uploaded
+2026-11-14T18:01:24.7494368Z Artifact name is valid!
+2026-11-14T18:01:24.7495755Z Root directory input is valid!
+2026-11-14T18:01:25.0073944Z Beginning upload of artifact content to blob storage
+2026-11-14T18:01:25.0257454Z (node:2222) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-14T18:01:25.2147402Z Uploaded bytes 86767
+2026-11-14T18:01:25.2544751Z Finished uploading artifact content to blob storage!
+2026-11-14T18:01:25.2547247Z SHA256 digest of uploaded artifact zip is 46485a00a2e2a6c425528fdbe77431fb6ce261eafc511bb151b4067fc3acfbba
+2026-11-14T18:01:25.2551916Z Finalizing artifact upload
+2026-11-14T18:01:25.6516829Z Artifact github-pages.zip successfully finalized. Artifact ID 14124838416
+2026-11-14T18:01:25.6517611Z Artifact github-pages has been successfully uploaded! Final size is 86767 bytes. Artifact ID is 14124838416
+2026-11-14T18:01:25.6522678Z Artifact download URL: https://github.com/gongyukai/dafuweng/actions/runs/43624244612/artifacts/14124838416
+2026-11-14T18:01:25.6627403Z ##[end-action id=__actions_upload-pages-artifact.upload-artifact;outcome=success;conclusion=success;duration_ms=1032]
+2026-11-14T18:01:25.6687155Z ##[group]Run actions/deploy-pages@v4
+2026-11-14T18:01:25.6687330Z with:
+2026-11-14T18:01:25.6688675Z   token: ***
+2026-11-14T18:01:25.6688798Z   timeout: 600000
+2026-11-14T18:01:25.6688928Z   error_count: 10
+2026-11-14T18:01:25.6689060Z   reporting_interval: 5000
+2026-11-14T18:01:25.6689234Z   artifact_name: github-pages
+2026-11-14T18:01:25.6689382Z   preview: false
+2026-11-14T18:01:25.6689507Z env:
+2026-11-14T18:01:25.6689623Z   GITHUB_PAGES: true
+2026-11-14T18:01:25.6689765Z ##[endgroup]
+2026-11-14T18:01:25.7836896Z (node:2234) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-14T18:01:25.7837460Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-14T18:01:26.0134716Z Fetching artifact metadata for "github-pages" in this workflow run
+2026-11-14T18:01:26.1638514Z Found 0 artifact(s)
+2026-11-14T18:01:26.1650764Z ##[error]Fetching artifact metadata failed. Is githubstatus.com reporting issues with API requests, Pages, or Actions? Please re-run the deployment at a later time.
+2026-11-14T18:01:26.2691694Z ##[error]Error: No artifacts named "github-pages" were found for this workflow run. Ensure artifacts are uploaded with actions/upload-artifact@v4 or later.
+    at getArtifactMetadata (/home/runner/work/_actions/actions/deploy-pages/v4/src/internal/api-client.js:85:1)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at Deployment.create (/home/runner/work/_actions/actions/deploy-pages/v4/src/internal/deployment.js:66:1)
+    at main (/home/runner/work/_actions/actions/deploy-pages/v4/src/index.js:30:1)
+2026-11-14T18:01:26.2952279Z ##[error]Error: No artifacts named "github-pages" were found for this workflow run. Ensure artifacts are uploaded with actions/upload-artifact@v4 or later.
+2026-11-14T18:01:26.3030824Z Post job cleanup.
+2026-11-14T18:01:26.3598650Z [command]/usr/bin/git version
+2026-11-14T18:01:26.3636437Z git version 2.56.1
+2026-11-14T18:01:26.3662877Z Temporarily overriding HOME='/home/runner/work/_temp/349a6c84-20a6-46e5-8f79-bd07602d28e6' before making global git config changes
+2026-11-14T18:01:26.3663606Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-14T18:01:26.3666857Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/dafuweng/dafuweng
+2026-11-14T18:01:26.3703661Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-14T18:01:26.3735906Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-14T18:01:26.3998989Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-14T18:01:26.4025091Z http.https://github.com/.extraheader
+2026-11-14T18:01:26.4033951Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-11-14T18:01:26.4070584Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-14T18:01:26.4337258Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-14T18:01:26.4368128Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-14T18:01:26.4717056Z Evaluate and set environment url
+2026-11-14T18:01:26.4720461Z Evaluated environment url: 
+2026-11-14T18:01:26.4720821Z Cleaning up orphan processes
+2026-11-14T18:01:26.4969051Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/configure-pages@v5, actions/deploy-pages@v4, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
