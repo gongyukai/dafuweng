@@ -162,7 +162,7 @@ button, input { font: inherit; color: inherit; }
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 206px minmax(0, 1fr) 400px;
+  grid-template-columns: 200px minmax(0, 1fr) 392px;
   gap: 8px;
   padding: 6px 8px 8px;
 }
@@ -264,8 +264,9 @@ button, input { font: inherit; color: inherit; }
 
 .board {
   position: relative;
-  width: min(100%, calc(100dvh - 56px));
-  aspect-ratio: 1 / 1;
+  width: 100%;
+  height: calc(100dvh - 68px);
+  aspect-ratio: auto;
   display: grid;
   grid-template-columns: repeat(11, 1fr);
   grid-template-rows: repeat(11, 1fr);
@@ -1172,7 +1173,7 @@ body.zen .zen-exit { display: block; }
   .side { order: 2; max-height: none; }
   .logcol { order: 3; min-height: 240px; max-height: 320px; }
   .panel.players { max-height: none; }
-  .board { width: min(100%, 92vw); font-size: clamp(7px, 2vw, 13px); }
+  .board { width: min(100%, 92vw); height: auto; aspect-ratio: 1 / 1; font-size: clamp(7px, 2vw, 13px); }
   .room-pill { margin-left: 0; }
   .brand-sub { display: none; }
   .cc-players, .cc-foot { display: none; }
