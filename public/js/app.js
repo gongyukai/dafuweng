@@ -30,6 +30,8 @@ const S = {
   itemPending: null,
   connecting: false,
   hostOpen: false,
+  hostTarget: null,
+  hostView: 'main',
 };
 
 const PIPS = {
@@ -1195,6 +1197,7 @@ function hideModal() {
   S.trade = null;
   S.itemPending = null;
   S.hostOpen = false;
+  S.hostView = 'main';
 }
 $('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal') hideModal(); });
 
@@ -1207,28 +1210,66 @@ function isHostGame() {
 
 function hostPanelHTML() {
   const v = S.view;
-  const rows = v.players.filter((p) => !p.bankrupt).map((p) => `
-    <div class="host-row">
-      <span class="host-name"><img src="${icon(pieceOf(p.piece).file)}" alt="">${esc(p.name)}</span>
-      <b class="host-cash">¥${fmt(p.cash)}</b>
-      <span class="host-acts">
-        <button data-host="grant" data-id="${p.id}" data-amount="1000">+1000</button>
-        <button data-host="grant" data-id="${p.id}" data-amount="5000">+5000</button>
-        <button data-host="grant" data-id="${p.id}" data-amount="-1000">−1000</button>
-        <button data-host="jail" data-id="${p.id}">入狱</button>
-        <button data-host="skip" data-id="${p.id}">定身</button>
-        <button data-host="item" data-id="${p.id}" data-item="dice">道具</button>
-      </span>
-    </div>`).join('');
+  const alive = v.players.filter((p) => !p.bankrupt);
+  if (!S.hostTarget || !alive.some((p) => p.id === S.hostTarget)) S.hostTarget = alive[0].id;
+  const t = alive.find((p) => p.id === S.hostTarget);
+  const chips = alive.map((p) => `<button class="host-chip${p.id === t.id ? ' on' : ''}" data-host="target" data-id="${p.id}">
+      <img src="${icon(pieceOf(p.piece).file)}" alt="">${esc(p.name)}
+    </button>`).join('');
+
+  if (S.hostView === 'land') {
+    const tiles = BOARD.map((tile) => {
+      const ownerId = v.owners[tile.i];
+      const owner = v.players.find((p) => p.id === ownerId);
+      return `<button class="host-tile${ownerId === t.id ? ' mine' : ''}" data-host="own" data-tile="${tile.i}">
+        <b>${esc(tile.short || tile.name)}</b><span>${owner ? esc(owner.name) : '无主'}</span>
+      </button>`;
+    }).join('');
+    return `<h2 class="trade-title">土地归属</h2>
+      <p class="trade-hint">点一块地就归到 <b>${esc(t.name)}</b> 名下；点同一块可以收回。</p>
+      <div class="host-tiles">${tiles}</div>
+      <div class="btn-row"><button class="btn" data-host="back">返回</button><button class="btn" id="modalClose">关闭</button></div>`;
+  }
+
   return `<h2 class="trade-title">神秘力量</h2>
     <p class="trade-hint">只有房主能看到这个面板，点击立即生效。</p>
-    <div class="host-list">${rows}</div>
+    <div class="host-chips">${chips}</div>
+    <div class="host-target">目标：<b>${esc(t.name)}</b> · <span>¥${fmt(t.cash)}</span></div>
+    <div class="host-grid">
+      <div class="host-sec"><b>现金</b><div class="host-acts">
+        <button data-host="cash" data-amount="1000">+1000</button>
+        <button data-host="cash" data-amount="5000">+5000</button>
+        <button data-host="cash" data-amount="-1000">−1000</button>
+        <input id="hostCashInput" type="number" min="0" placeholder="设现金" />
+        <button data-host="setcash">确定</button>
+      </div></div>
+      <div class="host-sec"><b>状态</b><div class="host-acts">
+        <button data-host="jail">入狱</button>
+        <button data-host="release">出狱</button>
+        <button data-host="skip">定身</button>
+        <button data-host="unskip">解除定身</button>
+      </div></div>
+      <div class="host-sec"><b>骰子</b><div class="host-acts">
+        ${[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((n) => `<button data-host="dice" data-value="${n}">${n}</button>`).join('')}
+      </div></div>
+      <div class="host-sec"><b>道具</b><div class="host-acts">
+        ${Object.keys(ITEMS).map((id) => `<button data-host="item" data-item="${id}">${ITEMS[id].name}</button>`).join('')}
+      </div></div>
+      <div class="host-sec"><b>土地</b><div class="host-acts">
+        <button data-host="land">改归属</button>
+        <button data-host="clearland">清空地产</button>
+      </div></div>
+      <div class="host-sec"><b>其他</b><div class="host-acts">
+        <button data-host="bankrupt">强制破产</button>
+      </div></div>
+    </div>
     <button class="btn wide" id="modalClose">关闭</button>`;
 }
 
 function openHostPanel() {
   if (!isHostGame()) return;
   S.hostOpen = true;
+  S.hostView = 'main';
   showModal(hostPanelHTML());
 }
 
@@ -1238,15 +1279,15 @@ function refreshHostPanel() {
   if (card && !$('#modal').classList.contains('hidden')) card.innerHTML = hostPanelHTML();
 }
 
-// 隐蔽入口 1：连续输入 dafuweng
+// 隐蔽入口 1：连续输入 laoban
 let hostKeys = '';
 document.addEventListener('keydown', (e) => {
   const tag = (e.target && e.target.tagName) || '';
   if (tag === 'INPUT' || tag === 'TEXTAREA') return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key.length !== 1) return;
-  hostKeys = (hostKeys + e.key.toLowerCase()).slice(-12);
-  if (hostKeys.endsWith('dafuweng')) { hostKeys = ''; openHostPanel(); }
+  hostKeys = (hostKeys + e.key.toLowerCase()).slice(-8);
+  if (hostKeys.endsWith('laoban')) { hostKeys = ''; openHostPanel(); }
 });
 
 // 隐蔽入口 2：长按左上角标题 1.5 秒
@@ -1267,13 +1308,26 @@ document.addEventListener('keydown', (e) => {
 $('#modalCard').addEventListener('click', (e) => {
   if (e.target.id === 'modalClose') { hideModal(); return; }
   const hostBtn = e.target.closest('[data-host]');
-  if (hostBtn && S.net) {
-    const id = hostBtn.dataset.id;
+  if (hostBtn) {
     const kind = hostBtn.dataset.host;
-    if (kind === 'grant') S.net.send({ type: 'hostGrant', targetId: id, amount: Number(hostBtn.dataset.amount) });
-    else if (kind === 'jail') S.net.send({ type: 'hostJail', targetId: id });
-    else if (kind === 'skip') S.net.send({ type: 'hostSkip', targetId: id });
-    else if (kind === 'item') S.net.send({ type: 'hostItem', targetId: id, item: hostBtn.dataset.item });
+    if (kind === 'target') { S.hostTarget = hostBtn.dataset.id; refreshHostPanel(); return; }
+    if (kind === 'land') { S.hostView = 'land'; refreshHostPanel(); return; }
+    if (kind === 'back') { S.hostView = 'main'; refreshHostPanel(); return; }
+    const t = S.hostTarget;
+    if (!t || !S.net) return;
+    if (kind === 'cash') S.net.send({ type: 'hostGrant', targetId: t, amount: Number(hostBtn.dataset.amount) });
+    else if (kind === 'setcash') {
+      const input = $('#hostCashInput');
+      S.net.send({ type: 'hostSetCash', targetId: t, amount: Number(input ? input.value : 0) });
+    } else if (kind === 'jail') S.net.send({ type: 'hostJail', targetId: t });
+    else if (kind === 'release') S.net.send({ type: 'hostRelease', targetId: t });
+    else if (kind === 'skip') S.net.send({ type: 'hostSkip', targetId: t });
+    else if (kind === 'unskip') S.net.send({ type: 'hostUnskip', targetId: t });
+    else if (kind === 'dice') S.net.send({ type: 'hostDice', targetId: t, value: Number(hostBtn.dataset.value) });
+    else if (kind === 'item') S.net.send({ type: 'hostItem', targetId: t, item: hostBtn.dataset.item });
+    else if (kind === 'own') S.net.send({ type: 'hostOwn', targetId: t, tile: Number(hostBtn.dataset.tile) });
+    else if (kind === 'clearland') S.net.send({ type: 'hostClearLand', targetId: t });
+    else if (kind === 'bankrupt') S.net.send({ type: 'hostBankrupt', targetId: t });
     return;
   }
   const diceBtn = e.target.closest('[data-dice]');

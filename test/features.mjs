@@ -301,6 +301,23 @@ console.log('\n隐藏房主操作');
   room.phase = 'end';
   act(room, host.id, { type: 'end' });
   expect(room.turn === 2 && target.skipTurns === 0, '被定身的玩家跳过一回合');
+
+  expect(act(room, host.id, { type: 'hostSetCash', targetId: target.id, amount: 4321 }).ok, '房主可以设置现金');
+  expect(target.cash === 4321, '现金被改成 4321');
+  expect(act(room, host.id, { type: 'hostTeleport', targetId: third.id, tile: 24 }).ok, '房主可以传送');
+  expect(third.pos === 24, '目标被传送到 24 格');
+  expect(act(room, host.id, { type: 'hostDice', targetId: third.id, value: 9 }).ok, '房主可以指定骰子');
+  expect(third.forcedDice === 9, '骰子被设为 9');
+  third.inJail = true;
+  expect(act(room, host.id, { type: 'hostRelease', targetId: third.id }).ok && !third.inJail, '房主可以放人出狱');
+  target.skipTurns = 2;
+  expect(act(room, host.id, { type: 'hostUnskip', targetId: target.id }).ok && target.skipTurns === 0, '房主可以解除定身');
+  expect(act(room, host.id, { type: 'hostOwn', targetId: target.id, tile: 5 }).ok, '房主可以改土地归属');
+  expect(room.owners[5] === target.id, '地块已归到目标名下');
+  expect(act(room, host.id, { type: 'hostClearLand', targetId: target.id }).ok, '房主可以清空地产');
+  expect(room.owners[5] === undefined, '地产已清空');
+  expect(act(room, host.id, { type: 'hostBankrupt', targetId: third.id }).ok, '房主可以强制破产');
+  expect(third.bankrupt, '目标已破产');
 }
 
 console.log(`\n🎉 新玩法单测全部通过（${passed} 项断言）`);

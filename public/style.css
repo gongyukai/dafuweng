@@ -924,21 +924,34 @@ button, input { font: inherit; color: inherit; }
 .ttile.mort span { color: #ffb4a8; }
 
 /* ---------------- 房主面板（隐藏入口） ---------------- */
-.host-list { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 14px; max-height: 58vh; overflow-y: auto; }
-.host-row {
+.host-chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+.host-chip {
   display: flex;
   align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.host-chip img { width: 20px; height: 20px; object-fit: contain; }
+.host-chip.on { border-color: var(--gold); color: var(--gold); background: rgba(233, 196, 134, 0.14); }
+.host-target { font-size: 13px; color: var(--muted); margin: 6px 0 10px; }
+.host-target b { color: var(--gold); }
+.host-grid { display: flex; flex-direction: column; gap: 8px; max-height: 52vh; overflow-y: auto; margin-bottom: 12px; }
+.host-sec {
+  display: flex;
   gap: 10px;
+  align-items: flex-start;
   padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.04);
-  flex-wrap: wrap;
 }
-.host-name { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 13px; }
-.host-name img { width: 24px; height: 24px; object-fit: contain; }
-.host-cash { margin-left: auto; color: var(--gold); font-variant-numeric: tabular-nums; font-size: 13px; }
-.host-acts { display: flex; gap: 4px; flex-wrap: wrap; }
+.host-sec > b { width: 34px; flex: none; color: var(--muted); font-size: 12px; padding-top: 4px; }
+.host-acts { display: flex; gap: 4px; flex-wrap: wrap; flex: 1; }
 .host-acts button {
   font-size: 11.5px;
   padding: 4px 8px;
@@ -948,6 +961,31 @@ button, input { font: inherit; color: inherit; }
   cursor: pointer;
 }
 .host-acts button:hover { background: rgba(233, 196, 134, 0.18); }
+.host-acts input {
+  width: 92px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.25);
+  color: inherit;
+  font-size: 12px;
+}
+.host-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; max-height: 52vh; overflow-y: auto; margin: 10px 0 14px; }
+.host-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  text-align: left;
+  font-size: 11px;
+}
+.host-tile b { font-size: 12px; }
+.host-tile span { color: var(--muted); font-size: 10px; }
+.host-tile.mine { border-color: var(--gold); color: var(--gold); }
 
 /* ---------------- 玩家交易 ---------------- */
 

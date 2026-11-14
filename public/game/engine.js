@@ -1204,6 +1204,44 @@ function handleHost(room, host, action) {
   } else if (type === 'hostItem') {
     if (!ITEMS[action.item]) return fail('没有这个道具');
     if (!grantItem(room, target, action.item)) return fail('对方道具已满');
+  } else if (type === 'hostSetCash') {
+    const amount = Math.max(0, Math.min(10000000, Math.round(Number(action.amount) || 0)));
+    target.cash = amount;
+    pushLog(room, `✨ 一股神秘力量重写了 ${target.name} 的现金`, 'money');
+  } else if (type === 'hostTeleport') {
+    const tile = Math.max(0, Math.min(39, Math.floor(Number(action.tile) || 0)));
+    target.pos = tile;
+    target.jailTurns = 0;
+    if (tile !== 10) target.inJail = false;
+    pushLog(room, `✨ 一股神秘力量把 ${target.name} 传送走了`, 'info');
+  } else if (type === 'hostDice') {
+    const value = Math.max(2, Math.min(12, Math.round(Number(action.value) || 0)));
+    target.forcedDice = value;
+    pushLog(room, `✨ ${target.name} 的下一次骰子被神秘力量改写了`, 'info');
+  } else if (type === 'hostRelease') {
+    target.inJail = false;
+    target.jailTurns = 0;
+    pushLog(room, `✨ 一股神秘力量把 ${target.name} 放出了监狱`, 'jail');
+  } else if (type === 'hostUnskip') {
+    target.skipTurns = 0;
+    pushLog(room, `✨ ${target.name} 恢复了行动`, 'info');
+  } else if (type === 'hostOwn') {
+    const tile = Math.max(0, Math.min(39, Math.floor(Number(action.tile) || 0)));
+    room.owners[tile] = target.id;
+    delete room.houses[tile];
+    delete room.mortgaged[tile];
+    pushLog(room, `✨ 一股神秘力量改写了 ${BOARD[tile].name} 的归属`, 'info');
+  } else if (type === 'hostClearLand') {
+    for (const i of ownedTiles(room, target.id)) {
+      delete room.owners[i];
+      delete room.houses[i];
+      delete room.mortgaged[i];
+    }
+    pushLog(room, `✨ ${target.name} 的地产被神秘力量收走了`, 'info');
+  } else if (type === 'hostBankrupt') {
+    bankrupt(room, target, null);
+    pushLog(room, `✨ 一股神秘力量让 ${target.name} 破产了`, 'bankrupt');
+    normalize(room);
   } else {
     return fail('未知操作');
   }

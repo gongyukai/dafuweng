@@ -94,16 +94,27 @@ if (hasStart) {
   console.log('✅ 大厅开始游戏，秘密任务已下发');
 
   // 隐藏房主面板：输入 dafuweng
-  await ev("(() => { for (const ch of 'dafuweng') document.dispatchEvent(new KeyboardEvent('keydown', { key: ch })); })()");
-  await until("!!document.querySelector('.host-list')", '隐藏房主面板');
+  await ev("(() => { for (const ch of 'laoban') document.dispatchEvent(new KeyboardEvent('keydown', { key: ch })); })()");
+  await until("!!document.querySelector('.host-chips')", '隐藏房主面板');
   const targetId = await ev("window.__dmj.view.players.find((p) => p.id !== window.__dmj.me).id");
+  await ev(`document.querySelector('.host-chip[data-id="${targetId}"]').click()`);
+  await sleep(300);
   const beforeCash = await ev(`window.__dmj.view.players.find((p) => p.id === ${JSON.stringify(targetId)}).cash`);
-  await ev(`document.querySelector('.host-row [data-id="${targetId}"][data-host="grant"]').click()`);
+  await ev("document.querySelector('.host-acts [data-host=\"cash\"][data-amount=\"1000\"]').click()");
   await sleep(500);
   const afterCash = await ev(`window.__dmj.view.players.find((p) => p.id === ${JSON.stringify(targetId)}).cash`);
   assert(afterCash === beforeCash + 1000, `房主加钱生效（${beforeCash} → ${afterCash}）`);
+  // 改土地归属
+  await ev("document.querySelector('[data-host=\"land\"]').click()");
+  await until("!!document.querySelector('.host-tiles')", '土地面板');
+  await ev("document.querySelector('.host-tile[data-tile=\"1\"]').click()");
+  await sleep(500);
+  const owner = await ev("window.__dmj.view.owners[1]");
+  assert(owner === targetId, '房主可以改土地归属');
+  await ev("document.querySelector('[data-host=\"back\"]').click()");
+  await sleep(200);
   await ev("document.querySelector('#modalClose').click()");
-  console.log('✅ 隐藏房主面板可用（加钱生效）');
+  console.log('✅ 隐藏房主面板可用（加钱 + 改土地归属）');
 }
 
 // 3. 掷骰子
