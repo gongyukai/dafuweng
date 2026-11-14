@@ -121,16 +121,22 @@ button, input { font: inherit; color: inherit; }
 .app { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 
 .topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 44px;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 4px 14px;
-  min-height: 40px;
-  border-bottom: 1px solid var(--line);
-  background: rgba(3, 16, 12, 0.5);
-  backdrop-filter: blur(8px);
-  flex-wrap: wrap;
+  padding: 0 14px;
+  background: transparent;
+  border-bottom: none;
+  z-index: 40;
+  pointer-events: none;
 }
+.topbar > * { pointer-events: auto; }
+.topbar .status { display: none !important; }
 
 .brand { font-weight: 800; letter-spacing: 1px; display: flex; align-items: center; gap: 7px; }
 .brand .dice-ico { font-size: 18px; }
@@ -164,7 +170,7 @@ button, input { font: inherit; color: inherit; }
   display: grid;
   grid-template-columns: 200px minmax(0, 1fr) 392px;
   gap: 8px;
-  padding: 6px 8px 8px;
+  padding: 8px;
 }
 
 .panel {
@@ -264,9 +270,9 @@ button, input { font: inherit; color: inherit; }
 
 .board {
   position: relative;
-  width: 100%;
-  height: calc(100dvh - 68px);
-  aspect-ratio: auto;
+  width: min(100%, calc(100dvh - 16px));
+  height: auto;
+  aspect-ratio: 1 / 1;
   display: grid;
   grid-template-columns: repeat(11, 1fr);
   grid-template-rows: repeat(11, 1fr);
@@ -323,10 +329,10 @@ button, input { font: inherit; color: inherit; }
   left: 50%;
   top: 54%;
   transform: translate(-50%, -50%);
-  width: 2.9em;
-  height: 2.9em;
+  width: 2.6em;
+  height: 2.6em;
   object-fit: contain;
-  opacity: 0.2;
+  opacity: 0.1;
   filter: saturate(0.9);
   pointer-events: none;
   z-index: 0;
@@ -368,11 +374,11 @@ button, input { font: inherit; color: inherit; }
   line-height: 1.5;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
-.tile.side-bottom { padding: 8% 2% 10%; }
-.tile.side-top { padding: 10% 2% 8%; }
-.tile.side-left { padding: 8% 13% 10% 4%; }
-.tile.side-right { padding: 8% 4% 10% 13%; }
-.tile .ico { width: 1.65em; height: 1.65em; object-fit: contain; z-index: 1; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.12)); }
+.tile.side-bottom { padding: 20% 2% 3%; }
+.tile.side-top { padding: 3% 2% 20%; }
+.tile.side-left { padding: 2% 20% 2% 3%; }
+.tile.side-right { padding: 2% 3% 2% 20%; }
+.tile .ico { width: 1.5em; height: 1.5em; object-fit: contain; z-index: 1; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.12)); }
 
 .tile.corner { background: linear-gradient(160deg, #fdf6e4, #f0dfbd); }
 .tile.corner .ico { width: 2.3em; height: 2.3em; }
@@ -691,6 +697,7 @@ button, input { font: inherit; color: inherit; }
 
 .side { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
 
+.logcol, .side { margin-top: 44px; }
 .panel.players { flex: 0 0 auto; max-height: 38%; display: flex; flex-direction: column; }
 .panel.players.lobby-mode { max-height: 46%; }
 .player-list { overflow-y: auto; padding-right: 4px; scrollbar-width: thin; }
@@ -1162,6 +1169,10 @@ body.zen .zen-exit { display: block; }
 }
 
 @media (max-width: 960px) {
+  .topbar { position: static; height: auto; min-height: 44px; background: rgba(3, 16, 12, 0.5); pointer-events: auto; flex-wrap: wrap; padding: 8px 14px; }
+  .topbar .status { display: flex !important; white-space: nowrap; }
+  .brand { white-space: nowrap; }
+  .logcol, .side { margin-top: 0; }
   html, body { overflow: auto; }
   .app { height: auto; min-height: 100dvh; }
   .layout {

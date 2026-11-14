@@ -274,7 +274,6 @@ function tileEl(t, v) {
     parts.push(`<div class="band" style="background:linear-gradient(180deg, ${g.color}, ${g.color}b8)"></div>`);
     parts.push(`<img class="wm" src="${icon(`${t.icon}.svg`)}" alt="">`);
   }
-
   const ownerId = v.owners[t.i];
   const owner = ownerId ? v.players.find((p) => p.id === ownerId) : null;
   if (owner) {
@@ -284,7 +283,7 @@ function tileEl(t, v) {
   if (v.mortgaged[t.i]) el.classList.add('mortgaged');
 
   if (t.type === 'prop') {
-    parts.push(`<div class="tname">${esc(t.name)}</div><div class="tprice">¥${t.price}</div>`);
+    parts.push(`<img class="ico" src="${icon(`${t.icon}.svg`)}" alt=""><div class="tname">${esc(t.name)}</div><div class="tprice">¥${t.price}</div>`);
   } else if (t.type === 'rail') {
     parts.push(`<img class="ico" src="${icon('1f689.svg')}" alt=""><div class="tname">${esc(t.short)}</div><div class="tprice">¥${t.price}</div>`);
   } else if (t.type === 'util') {
