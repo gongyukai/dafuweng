@@ -1217,6 +1217,16 @@ function hostPanelHTML() {
       <img src="${icon(pieceOf(p.piece).file)}" alt="">${esc(p.name)}
     </button>`).join('');
 
+  if (S.hostView === 'tp') {
+    const tiles = BOARD.map((tile) => `<button class="host-tile" data-host="tp" data-tile="${tile.i}">
+        <b>${esc(tile.short || tile.name)}</b><span>第 ${tile.i} 格</span>
+      </button>`).join('');
+    return `<h2 class="trade-title">传送 ${esc(t.name)}</h2>
+      <p class="trade-hint">点一格，直接把 ${esc(t.name)} 传送到那里。</p>
+      <div class="host-tiles">${tiles}</div>
+      <div class="btn-row"><button class="btn" data-host="back">返回</button><button class="btn" id="modalClose">关闭</button></div>`;
+  }
+
   if (S.hostView === 'land') {
     const tiles = BOARD.map((tile) => {
       const ownerId = v.owners[tile.i];
@@ -1246,6 +1256,7 @@ function hostPanelHTML() {
       <div class="host-sec"><b>状态</b><div class="host-acts">
         <button data-host="jail">入狱</button>
         <button data-host="release">出狱</button>
+        <button data-host="tpview">传送</button>
         <button data-host="skip">定身</button>
         <button data-host="unskip">解除定身</button>
       </div></div>
@@ -1312,10 +1323,12 @@ $('#modalCard').addEventListener('click', (e) => {
     const kind = hostBtn.dataset.host;
     if (kind === 'target') { S.hostTarget = hostBtn.dataset.id; refreshHostPanel(); return; }
     if (kind === 'land') { S.hostView = 'land'; refreshHostPanel(); return; }
+    if (kind === 'tpview') { S.hostView = 'tp'; refreshHostPanel(); return; }
     if (kind === 'back') { S.hostView = 'main'; refreshHostPanel(); return; }
     const t = S.hostTarget;
     if (!t || !S.net) return;
-    if (kind === 'cash') S.net.send({ type: 'hostGrant', targetId: t, amount: Number(hostBtn.dataset.amount) });
+    if (kind === 'tp') S.net.send({ type: 'hostTeleport', targetId: t, tile: Number(hostBtn.dataset.tile) });
+    else if (kind === 'cash') S.net.send({ type: 'hostGrant', targetId: t, amount: Number(hostBtn.dataset.amount) });
     else if (kind === 'setcash') {
       const input = $('#hostCashInput');
       S.net.send({ type: 'hostSetCash', targetId: t, amount: Number(input ? input.value : 0) });

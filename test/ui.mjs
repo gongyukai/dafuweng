@@ -113,8 +113,15 @@ if (hasStart) {
   assert(owner === targetId, '房主可以改土地归属');
   await ev("document.querySelector('[data-host=\"back\"]').click()");
   await sleep(200);
+  // 传送
+  await ev("document.querySelector('[data-host=\"tpview\"]').click()");
+  await until("!!document.querySelector('.host-tiles')", '传送面板');
+  await ev("document.querySelector('.host-tile[data-tile=\"5\"]').click()");
+  await sleep(500);
+  const pos = await ev(`window.__dmj.view.players.find((p) => p.id === ${JSON.stringify(targetId)}).pos`);
+  assert(pos === 5, `房主可以传送（落点 ${pos}）`);
   await ev("document.querySelector('#modalClose').click()");
-  console.log('✅ 隐藏房主面板可用（加钱 + 改土地归属）');
+  console.log('✅ 隐藏房主面板可用（加钱 + 改土地 + 传送）');
 }
 
 // 3. 掷骰子
