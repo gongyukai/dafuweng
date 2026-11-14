@@ -14,7 +14,7 @@
   --danger: #e2574c;
   --ok: #4fb37a;
   --radius: 16px;
-  --tile-fs: 14px;
+  --tile-fs: 16px;
 }
 
 * { box-sizing: border-box; }
@@ -124,8 +124,8 @@ button, input { font: inherit; color: inherit; }
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 14px;
-  min-height: 50px;
+  padding: 6px 14px;
+  min-height: 46px;
   border-bottom: 1px solid var(--line);
   background: rgba(3, 16, 12, 0.5);
   backdrop-filter: blur(8px);
@@ -162,9 +162,9 @@ button, input { font: inherit; color: inherit; }
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 232px minmax(0, 1fr) 426px;
-  gap: 12px;
-  padding: 12px 14px 14px;
+  grid-template-columns: 222px minmax(0, 1fr) 412px;
+  gap: 10px;
+  padding: 10px 12px 12px;
 }
 
 .panel {
@@ -264,13 +264,13 @@ button, input { font: inherit; color: inherit; }
 
 .board {
   position: relative;
-  width: min(100%, calc(100dvh - 84px));
+  width: min(100%, calc(100dvh - 64px));
   aspect-ratio: 1 / 1;
   display: grid;
-  grid-template-columns: 1.5fr repeat(9, 1fr) 1.5fr;
-  grid-template-rows: 1.5fr repeat(9, 1fr) 1.5fr;
+  grid-template-columns: 1.4fr repeat(9, 1fr) 1.4fr;
+  grid-template-rows: 1.4fr repeat(9, 1fr) 1.4fr;
   background: linear-gradient(160deg, #fbf6e9, #efe2c6);
-  border: 12px solid #0a2a20;
+  border: 9px solid #0a2a20;
   border-radius: 12px;
   box-shadow:
     0 0 0 2px rgba(233, 196, 134, 0.42),
@@ -371,7 +371,7 @@ button, input { font: inherit; color: inherit; }
 .tile.side-top { padding-bottom: 15%; padding-top: 22%; }
 .tile.side-left { padding-right: 14%; padding-bottom: 22%; }
 .tile.side-right { padding-left: 14%; padding-bottom: 22%; }
-.tile .ico { width: 1.75em; height: 1.75em; object-fit: contain; z-index: 1; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.12)); }
+.tile .ico { width: 1.85em; height: 1.85em; object-fit: contain; z-index: 1; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.12)); }
 
 .tile.corner { background: linear-gradient(160deg, #fdf6e4, #f0dfbd); }
 .tile.corner .ico { width: 2.3em; height: 2.3em; }
@@ -427,14 +427,16 @@ button, input { font: inherit; color: inherit; }
 
 .center {
   grid-area: 2 / 2 / 11 / 11;
+  margin: 3.2%;
+  border: 1px solid rgba(233, 196, 134, 0.32);
   position: relative;
   background:
     radial-gradient(circle at 50% 20%, #1f5d47 0%, #0b3125 68%),
     repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.015) 0 2px, transparent 2px 6px);
-  border-radius: 8px;
+  border-radius: 10px;
   display: grid;
   place-items: center;
-  padding: 3%;
+  padding: 2.5%;
   overflow: hidden;
   color: #f0e9d8;
 }
@@ -466,18 +468,18 @@ button, input { font: inherit; color: inherit; }
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  gap: clamp(4px, 0.8vh, 10px);
-  padding: 5% 3%;
+  gap: clamp(3px, 0.5vh, 7px);
+  padding: 3.5% 2.5%;
   min-height: 0;
 }
 
-.cc-block { display: flex; flex-direction: column; align-items: center; gap: clamp(6px, 1.2vh, 16px); width: 100%; }
+.cc-block { display: flex; flex-direction: column; align-items: center; gap: clamp(4px, 0.9vh, 11px); width: 100%; }
 
 .cc-top { display: flex; flex-direction: column; align-items: center; gap: 4px; z-index: 2; }
 .cc-round { font-size: clamp(10px, 1.3vh, 14px); color: #8fae9f; letter-spacing: 2px; }
 .cc-turn-row { display: flex; align-items: center; gap: 8px; }
 .cc-av { width: clamp(22px, 3.2vh, 36px); height: clamp(22px, 3.2vh, 36px); object-fit: contain; filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.5)); }
-.cc-turn { font-size: clamp(15px, 2.4vh, 26px); font-weight: 800; color: #f4eddc; }
+.cc-turn { font-size: clamp(14px, 2.1vh, 22px); font-weight: 800; color: #f4eddc; }
 .cc-turn.mine { color: var(--gold); text-shadow: 0 0 24px rgba(233, 196, 134, 0.45); }
 
 .cc-watermark {
@@ -514,7 +516,7 @@ button, input { font: inherit; color: inherit; }
 .dice-row { display: flex; gap: clamp(8px, 1.4vh, 18px); }
 
 .die {
-  width: clamp(42px, 8.6vh, 92px);
+  width: clamp(38px, 7vh, 78px);
   aspect-ratio: 1;
   border-radius: 18%;
   background: linear-gradient(150deg, #fffdf6, #e6dcc4);
