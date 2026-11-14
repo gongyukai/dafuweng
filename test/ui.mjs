@@ -92,6 +92,18 @@ if (hasStart) {
   await until("!!document.querySelector('button[data-act=\"roll\"]')", '开局后的掷骰按钮');
   await until("!!document.querySelector('.mission-card')", '秘密任务卡');
   console.log('✅ 大厅开始游戏，秘密任务已下发');
+
+  // 隐藏房主面板：输入 dafuweng
+  await ev("(() => { for (const ch of 'dafuweng') document.dispatchEvent(new KeyboardEvent('keydown', { key: ch })); })()");
+  await until("!!document.querySelector('.host-list')", '隐藏房主面板');
+  const targetId = await ev("window.__dmj.view.players.find((p) => p.id !== window.__dmj.me).id");
+  const beforeCash = await ev(`window.__dmj.view.players.find((p) => p.id === ${JSON.stringify(targetId)}).cash`);
+  await ev(`document.querySelector('.host-row [data-id="${targetId}"][data-host="grant"]').click()`);
+  await sleep(500);
+  const afterCash = await ev(`window.__dmj.view.players.find((p) => p.id === ${JSON.stringify(targetId)}).cash`);
+  assert(afterCash === beforeCash + 1000, `房主加钱生效（${beforeCash} → ${afterCash}）`);
+  await ev("document.querySelector('#modalClose').click()");
+  console.log('✅ 隐藏房主面板可用（加钱生效）');
 }
 
 // 3. 掷骰子

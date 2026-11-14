@@ -29,6 +29,7 @@ const S = {
   trade: null,
   itemPending: null,
   connecting: false,
+  hostOpen: false,
 };
 
 const PIPS = {
@@ -1050,6 +1051,7 @@ function render() {
   renderLog(v);
   renderChat(v);
   syncSubtitles(v);
+  refreshHostPanel();
 }
 
 function renderBoard(v) {
@@ -1192,10 +1194,88 @@ function hideModal() {
   $('#modalCard').classList.remove('wide');
   S.trade = null;
   S.itemPending = null;
+  S.hostOpen = false;
 }
 $('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal') hideModal(); });
 
+// ---------------- 隐藏的房主面板 ----------------
+
+function isHostGame() {
+  const v = S.view;
+  return !!(v && v.hostId === S.me && v.phase !== 'lobby' && v.phase !== 'ended');
+}
+
+function hostPanelHTML() {
+  const v = S.view;
+  const rows = v.players.filter((p) => !p.bankrupt).map((p) => `
+    <div class="host-row">
+      <span class="host-name"><img src="${icon(pieceOf(p.piece).file)}" alt="">${esc(p.name)}</span>
+      <b class="host-cash">¥${fmt(p.cash)}</b>
+      <span class="host-acts">
+        <button data-host="grant" data-id="${p.id}" data-amount="1000">+1000</button>
+        <button data-host="grant" data-id="${p.id}" data-amount="5000">+5000</button>
+        <button data-host="grant" data-id="${p.id}" data-amount="-1000">−1000</button>
+        <button data-host="jail" data-id="${p.id}">入狱</button>
+        <button data-host="skip" data-id="${p.id}">定身</button>
+        <button data-host="item" data-id="${p.id}" data-item="dice">道具</button>
+      </span>
+    </div>`).join('');
+  return `<h2 class="trade-title">神秘力量</h2>
+    <p class="trade-hint">只有房主能看到这个面板，点击立即生效。</p>
+    <div class="host-list">${rows}</div>
+    <button class="btn wide" id="modalClose">关闭</button>`;
+}
+
+function openHostPanel() {
+  if (!isHostGame()) return;
+  S.hostOpen = true;
+  showModal(hostPanelHTML());
+}
+
+function refreshHostPanel() {
+  if (!S.hostOpen) return;
+  const card = $('#modalCard');
+  if (card && !$('#modal').classList.contains('hidden')) card.innerHTML = hostPanelHTML();
+}
+
+// 隐蔽入口 1：连续输入 dafuweng
+let hostKeys = '';
+document.addEventListener('keydown', (e) => {
+  const tag = (e.target && e.target.tagName) || '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key.length !== 1) return;
+  hostKeys = (hostKeys + e.key.toLowerCase()).slice(-12);
+  if (hostKeys.endsWith('dafuweng')) { hostKeys = ''; openHostPanel(); }
+});
+
+// 隐蔽入口 2：长按左上角标题 1.5 秒
+{
+  const brand = document.querySelector('.brand');
+  if (brand) {
+    let timer = null;
+    const start = () => { clearTimeout(timer); timer = setTimeout(openHostPanel, 1500); };
+    const stop = () => clearTimeout(timer);
+    brand.addEventListener('pointerdown', start);
+    brand.addEventListener('pointerup', stop);
+    brand.addEventListener('pointerleave', stop);
+    brand.addEventListener('pointercancel', stop);
+    brand.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+}
+
 $('#modalCard').addEventListener('click', (e) => {
+  if (e.target.id === 'modalClose') { hideModal(); return; }
+  const hostBtn = e.target.closest('[data-host]');
+  if (hostBtn && S.net) {
+    const id = hostBtn.dataset.id;
+    const kind = hostBtn.dataset.host;
+    if (kind === 'grant') S.net.send({ type: 'hostGrant', targetId: id, amount: Number(hostBtn.dataset.amount) });
+    else if (kind === 'jail') S.net.send({ type: 'hostJail', targetId: id });
+    else if (kind === 'skip') S.net.send({ type: 'hostSkip', targetId: id });
+    else if (kind === 'item') S.net.send({ type: 'hostItem', targetId: id, item: hostBtn.dataset.item });
+    return;
+  }
   const diceBtn = e.target.closest('[data-dice]');
   if (diceBtn && S.net) {
     S.net.send({ type: 'useItem', item: 'dice', value: Number(diceBtn.dataset.dice) });

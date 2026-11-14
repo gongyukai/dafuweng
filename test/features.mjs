@@ -279,4 +279,28 @@ console.log('\n机器人会用道具');
   expect(bot.items.length === 0, '普通性格也会在落后时用均富卡');
 }
 
+console.log('\n隐藏房主操作');
+{
+  const { room, players } = makeGame(3);
+  const [host, target, third] = players;
+  room.turn = 0;
+  room.phase = 'roll';
+  const before = target.cash;
+  const r = act(room, host.id, { type: 'hostGrant', targetId: target.id, amount: 1000 });
+  expect(r.ok, '房主可以给玩家加钱');
+  expect(target.cash === before + 1000, '现金增加 1000');
+  expect(!act(room, target.id, { type: 'hostGrant', targetId: target.id, amount: 1000 }).ok, '非房主不能使用');
+  expect(act(room, host.id, { type: 'hostJail', targetId: third.id }).ok, '房主可以把玩家送进监狱');
+  expect(third.inJail && third.pos === 10, '目标已入狱');
+  expect(act(room, host.id, { type: 'hostItem', targetId: third.id, item: 'dice' }).ok, '房主可以给道具');
+  expect(third.items.includes('dice'), '道具已发放');
+  expect(act(room, host.id, { type: 'hostSkip', targetId: target.id }).ok, '房主可以定身');
+  expect(target.skipTurns === 1, '定身标记已设置');
+  // 轮到被定身的玩家时会被跳过
+  room.turn = 0;
+  room.phase = 'end';
+  act(room, host.id, { type: 'end' });
+  expect(room.turn === 2 && target.skipTurns === 0, '被定身的玩家跳过一回合');
+}
+
 console.log(`\n🎉 新玩法单测全部通过（${passed} 项断言）`);

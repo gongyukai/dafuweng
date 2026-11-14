@@ -194,6 +194,7 @@ export function resetRoom(room) {
     p.mission = null;
     p.missionDone = false;
     p.forcedDice = 0;
+    p.skipTurns = 0;
   }
   pushLog(room, '新的一局开始了，等待房主开局', 'system');
 }
@@ -225,6 +226,7 @@ export function addPlayer(room, name, opts = {}) {
     shield: false,
     mission: null,
     missionDone: false,
+    skipTurns: 0,
     persona: opts.persona || (opts.isBot ? PERSONA_IDS[Math.floor(Math.random() * PERSONA_IDS.length)] : null),
     joinedAt: Date.now(),
   };
@@ -385,6 +387,7 @@ export function startGame(room) {
     p.shield = false;
     p.forcedDice = 0;
     p.missionDone = false;
+    p.skipTurns = 0;
   }
   room.owners = {};
   room.houses = {};
@@ -905,6 +908,11 @@ function nextTurn(room) {  if (room.phase === 'ended') return;
     const i = (prev + k) % n;
     const p = room.players[i];
     if (!p.bankrupt) {
+      if ((p.skipTurns || 0) > 0) {
+        p.skipTurns -= 1;
+        pushLog(room, `${p.name} 被神秘力量定住，跳过本回合`, 'info');
+        continue;
+      }
       if (i <= prev) room.round += 1;
       room.turn = i;
       room.phase = 'roll';
@@ -1176,6 +1184,33 @@ export function tickStall(room, now = Date.now()) {
   return true;
 }
 
+function handleHost(room, host, action) {
+  const target = byId(room, action.targetId);
+  if (!target || target.bankrupt) return fail('目标不在对局中');
+  const type = action.type;
+  if (type === 'hostGrant') {
+    const amount = Math.max(-1000000, Math.min(1000000, Math.round(Number(action.amount) || 0)));
+    if (!amount) return fail('金额无效');
+    target.cash = Math.max(0, target.cash + amount);
+    pushLog(room, `✨ 一股神秘力量拨动了 ${target.name} 的钱袋`, 'money');
+  } else if (type === 'hostJail') {
+    target.pos = 10;
+    target.inJail = true;
+    target.jailTurns = 0;
+    pushLog(room, `✨ 一股神秘力量把 ${target.name} 送进了监狱`, 'jail');
+  } else if (type === 'hostSkip') {
+    target.skipTurns = (target.skipTurns || 0) + 1;
+    pushLog(room, `✨ ${target.name} 被神秘力量定住了`, 'info');
+  } else if (type === 'hostItem') {
+    if (!ITEMS[action.item]) return fail('没有这个道具');
+    if (!grantItem(room, target, action.item)) return fail('对方道具已满');
+  } else {
+    return fail('未知操作');
+  }
+  room.seq++;
+  return ok();
+}
+
 function actInner(room, playerId, action) {
   const p = byId(room, playerId);
   if (!p) return fail('玩家不存在');
@@ -1245,6 +1280,11 @@ function actInner(room, playerId, action) {
       return ok();
     }
     return fail('本局已经结束');
+  }
+
+  if (type && type.startsWith('host')) {
+    if (p.id !== room.hostId) return fail('只有房主能这么做');
+    return handleHost(room, p, action);
   }
 
   if (room.phase === 'debt') {
@@ -1507,6 +1547,7 @@ export function view(room, youId) {
       itemCount: (p.items || []).length,
       mission: (p.id === youId || room.phase === 'ended') ? p.mission : null,
       missionDone: !!p.missionDone,
+      skipTurns: p.skipTurns || 0,
     })),
     owners: room.owners,
     houses: room.houses,
