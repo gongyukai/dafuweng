@@ -430,7 +430,7 @@ function syncTokens(v) {
       el.className = 'tk instant';
       el.dataset.pid = p.id;
       el.style.setProperty('--pc', p.color);
-      el.innerHTML = `<img src="${icon(pieceOf(p.piece).file)}" alt="${esc(p.name)}"><b class="tk-tag">你</b>`;
+      el.innerHTML = `<img src="${icon(pieceOf(p.piece).file)}" alt="${esc(p.name)}">`;
       if (p.id === S.me) el.classList.add('me');
       layer.appendChild(el);
       t = { el, pos: p.pos, walking: false };
