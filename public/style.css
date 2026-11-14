@@ -628,6 +628,20 @@ button, input { font: inherit; color: inherit; }
 .tk.walking img { animation: hop 0.32s linear infinite; }
 .tk.jump { animation: teleportIn 0.38s ease; }
 
+/* 自己的棋子：贴着轮廓的柔光晕（无边框、无标签、不放大） */
+.tk.me { z-index: 6; }
+.tk.me img { filter: drop-shadow(0 0 2px rgba(70, 45, 0, 0.55)) drop-shadow(0 0 9px rgba(255, 190, 60, 1)) drop-shadow(0 0 20px rgba(255, 170, 40, 0.7)); }
+.tk.me::after {
+  content: "";
+  position: absolute;
+  inset: -10%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 55%, rgba(255, 190, 60, 0.7) 0%, rgba(255, 170, 40, 0.3) 45%, rgba(255, 170, 40, 0) 72%);
+  filter: blur(2px);
+  pointer-events: none;
+  z-index: 0;
+}
+
 
 
 .float-money {
