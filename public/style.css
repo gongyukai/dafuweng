@@ -604,7 +604,7 @@ button, input { font: inherit; color: inherit; }
 }
 .tk.fade-out { opacity: 0; }
 .tk.instant { transition: none; }
-.tk img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.tk img { width: 100%; height: 100%; object-fit: contain; display: block; position: relative; z-index: 1; }
 .tk::before {
   content: "";
   position: absolute;
@@ -620,6 +620,56 @@ button, input { font: inherit; color: inherit; }
 }
 .tk.walking img { animation: hop 0.32s linear infinite; }
 .tk.jump { animation: teleportIn 0.38s ease; }
+
+/* 自己的棋子：金色光环 + 「你」标签 */
+.tk.me {
+  z-index: 6;
+  background: radial-gradient(circle at 50% 55%, rgba(255, 215, 122, 0.3), transparent 68%);
+  border-radius: 50%;
+}
+.tk.me img {
+  transform: scale(1.22);
+  filter: drop-shadow(0 0 5px rgba(255, 215, 122, 0.95)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+.tk.me::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 150%;
+  height: 150%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2.5px solid #ffd77a;
+  box-shadow: 0 0 0 2px rgba(20, 14, 4, 0.55), 0 0 16px 6px rgba(233, 196, 134, 0.6),
+    inset 0 0 12px rgba(255, 215, 122, 0.35);
+  animation: mePulse 1.8s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+.tk-tag {
+  display: none;
+  position: absolute;
+  left: 50%;
+  top: -24%;
+  transform: translateX(-50%);
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #ffd77a;
+  border: 1px solid rgba(90, 64, 16, 0.65);
+  color: #1d1405;
+  font-size: calc(var(--tile-fs) * 0.46);
+  font-weight: 800;
+  line-height: 1.45;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+  z-index: 2;
+}
+.tk.me .tk-tag { display: block; }
+@keyframes mePulse {
+  0%, 100% { opacity: 0.55; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+}
 
 .float-money {
   position: absolute;

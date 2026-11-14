@@ -68,6 +68,12 @@ assert(tiles === 40, `应有 40 格，实际 ${tiles}`);
 assert(players === 4, `应有 4 名玩家，实际 ${players}`);
 console.log(`✅ 棋盘渲染：${tiles} 格 / ${players} 名玩家`);
 
+const meTokens = await ev("document.querySelectorAll('.tk.me').length");
+assert(meTokens === 1, `自己的棋子应有高亮，实际 ${meTokens} 个`);
+const meTag = await ev("document.querySelector('.tk.me .tk-tag')?.textContent || ''");
+assert(meTag === '你', '自己的棋子要有「你」标签');
+console.log('✅ 自己的棋子高亮（金环 + 你）');
+
 // 2. 大厅：选棋子后开始
 const hasStart = await ev("!!document.querySelector('button[data-act=\"start\"]')");
 if (hasStart) {

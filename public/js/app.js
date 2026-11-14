@@ -122,8 +122,11 @@ function syncSubtitles(v) {
   const fresh = logs.filter((l) => l.id > lastLogId && SUB_KINDS.has(l.kind));
   lastLogId = newest;
   if (!fresh.length) return;
-  subQueue.push(...fresh.slice(-3));
-  while (subQueue.length > 2) subQueue.shift();
+  // 一次动作可能同时产生掷骰、抽卡、加钱等日志；保证「掷出点数」不被挤掉
+  const diceLog = fresh.find((l) => l.kind === 'dice');
+  const picked = diceLog ? [diceLog, ...fresh.filter((l) => l !== diceLog).slice(-2)] : fresh.slice(-3);
+  subQueue.push(...picked);
+  while (subQueue.length > 3) subQueue.shift();
   if (!subBusy) pumpSubtitles();
 }
 
@@ -428,7 +431,8 @@ function syncTokens(v) {
       el.className = 'tk instant';
       el.dataset.pid = p.id;
       el.style.setProperty('--pc', p.color);
-      el.innerHTML = `<img src="${icon(pieceOf(p.piece).file)}" alt="${esc(p.name)}">`;
+      el.innerHTML = `<img src="${icon(pieceOf(p.piece).file)}" alt="${esc(p.name)}"><b class="tk-tag">你</b>`;
+      if (p.id === S.me) el.classList.add('me');
       layer.appendChild(el);
       t = { el, pos: p.pos, walking: false };
       S.tokens.set(p.id, t);
@@ -438,6 +442,7 @@ function syncTokens(v) {
       continue;
     }
     t.el.style.setProperty('--pc', p.color);
+    t.el.classList.toggle('me', p.id === S.me);
     const img = t.el.querySelector('img');
     const src = icon(pieceOf(p.piece).file);
     if (img.getAttribute('src') !== src) img.src = src;
