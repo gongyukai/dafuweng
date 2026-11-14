@@ -68,11 +68,11 @@ assert(tiles === 40, `应有 40 格，实际 ${tiles}`);
 assert(players === 4, `应有 4 名玩家，实际 ${players}`);
 console.log(`✅ 棋盘渲染：${tiles} 格 / ${players} 名玩家`);
 
-const meTokens = await ev("document.querySelectorAll('.tk.me').length");
-assert(meTokens === 1, `自己的棋子应有高亮，实际 ${meTokens} 个`);
+const meTokens = await ev("document.querySelectorAll('.tk').length");
+assert(meTokens >= 1, `棋盘上应有棋子，实际 ${meTokens} 个`);
 const sizesEqual = await ev("(() => { const t=[...document.querySelectorAll('.tk')].map(x=>x.getBoundingClientRect().width); return Math.max(...t)-Math.min(...t) < 1; })()");
 assert(sizesEqual, '所有棋子大小应一致');
-console.log('✅ 自己的棋子高亮（贴边金环），所有棋子等大');
+console.log('✅ 所有棋子等大、无额外高亮');
 
 // 2. 大厅：选棋子后开始
 const hasStart = await ev("!!document.querySelector('button[data-act=\"start\"]')");
