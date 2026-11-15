@@ -320,6 +320,7 @@ console.log('\n机器人会用道具');
 console.log('\n隐藏房主操作');
 {
   const { room, players } = makeGame(3);
+  room.missionsEnabled = false; // 避免任务奖励干扰金额断言
   const [host, target, third] = players;
   room.turn = 0;
   room.phase = 'roll';
@@ -354,8 +355,33 @@ console.log('\n隐藏房主操作');
   expect(room.owners[5] === target.id, '地块已归到目标名下');
   expect(act(room, host.id, { type: 'hostClearLand', targetId: target.id }).ok, '房主可以清空地产');
   expect(room.owners[5] === undefined, '地产已清空');
+  third.items = ['dice', 'shield'];
+  third.jailCards = 1;
+  expect(act(room, host.id, { type: 'hostRemoveItem', targetId: third.id, item: 'dice' }).ok, '房主可以销毁道具');
+  expect(!third.items.includes('dice') && third.items.includes('shield'), '只销毁指定的那一张');
+  expect(act(room, host.id, { type: 'hostRemoveJailCard', targetId: third.id }).ok, '房主可以销毁出狱卡');
+  expect(third.jailCards === 0, '出狱卡已销毁');
   expect(act(room, host.id, { type: 'hostBankrupt', targetId: third.id }).ok, '房主可以强制破产');
   expect(third.bankrupt, '目标已破产');
+}
+
+console.log('\n免租选择不会被心跳自动付掉');
+{
+  const { room, players } = makeGame(2);
+  room.owners[3] = players[1].id;
+  players[0].items = ['shield'];
+  players[0].pos = 0;
+  players[0].forcedDice = 3;
+  room.turn = 0;
+  room.phase = 'roll';
+  act(room, players[0].id, { type: 'roll' });
+  expect(room.phase === 'rent', '进入免租选择');
+  room.turnStartedAt = Date.now();
+  expect(!tickStall(room), '心跳不会立刻替玩家付款');
+  expect(room.phase === 'rent' && players[0].items.includes('shield'), '选择仍然保留');
+  room.turnStartedAt = Date.now() - 130000;
+  expect(tickStall(room), '超时后才自动付租');
+  expect(room.phase !== 'rent', '超时后离开选择');
 }
 
 console.log(`\n🎉 新玩法单测全部通过（${passed} 项断言）`);

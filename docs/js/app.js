@@ -1288,6 +1288,10 @@ function hostPanelHTML() {
         ${Object.keys(ITEMS).map((id) => `<button data-host="item" data-item="${id}">${ITEMS[id].name}</button>`).join('')}
         <button data-host="jailcard">出狱卡</button>
       </div></div>
+      <div class="host-sec"><b>销毁</b><div class="host-acts">
+        ${Object.keys(ITEMS).map((id) => `<button data-host="removeItem" data-item="${id}">${ITEMS[id].name}</button>`).join('')}
+        <button data-host="removeJail">出狱卡</button>
+      </div></div>
       <div class="host-sec"><b>土地</b><div class="host-acts">
         <button data-host="land">改归属</button>
         <button data-host="clearland">清空地产</button>
@@ -1361,6 +1365,8 @@ $('#modalCard').addEventListener('click', (e) => {
     else if (kind === 'dice') S.net.send({ type: 'hostDice', targetId: t, value: Number(hostBtn.dataset.value) });
     else if (kind === 'item') S.net.send({ type: 'hostItem', targetId: t, item: hostBtn.dataset.item });
     else if (kind === 'jailcard') S.net.send({ type: 'hostJailCard', targetId: t });
+    else if (kind === 'removeItem') S.net.send({ type: 'hostRemoveItem', targetId: t, item: hostBtn.dataset.item });
+    else if (kind === 'removeJail') S.net.send({ type: 'hostRemoveJailCard', targetId: t });
     else if (kind === 'own') S.net.send({ type: 'hostOwn', targetId: t, tile: Number(hostBtn.dataset.tile) });
     else if (kind === 'clearland') S.net.send({ type: 'hostClearLand', targetId: t });
     else if (kind === 'bankrupt') S.net.send({ type: 'hostBankrupt', targetId: t });

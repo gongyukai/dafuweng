@@ -1187,7 +1187,10 @@ export function tickStall(room, now = Date.now()) {
   if (room.phase === 'lobby' || room.phase === 'ended') return false;
   if (room.phase === 'rent' && room.rentChoice) {
     const payer = byId(room, room.rentChoice.payerId);
-    if (payer) act(room, payer.id, { type: 'payRent' });
+    if (!payer) return false;
+    const limit = payer.connected ? TURN_TIMEOUT_MS : TURN_TIMEOUT_OFFLINE_MS;
+    if (!room.turnStartedAt || now - room.turnStartedAt < limit) return false;
+    act(room, payer.id, { type: 'payRent' });
     return true;
   }
   const cur = currentPlayer(room);
@@ -1220,6 +1223,16 @@ function handleHost(room, host, action) {
   } else if (type === 'hostJailCard') {
     target.jailCards = (target.jailCards || 0) + 1;
     pushLog(room, `✨ ${target.name} 获得了一张保释卡`, 'jail');
+  } else if (type === 'hostRemoveItem') {
+    if (!ITEMS[action.item]) return fail('没有这个道具');
+    const idx = target.items.indexOf(action.item);
+    if (idx < 0) return fail('对方没有这张道具');
+    target.items.splice(idx, 1);
+    pushLog(room, `✨ 一股神秘力量销毁了 ${target.name} 的「${ITEMS[action.item].name}」`, 'card');
+  } else if (type === 'hostRemoveJailCard') {
+    if ((target.jailCards || 0) <= 0) return fail('对方没有出狱卡');
+    target.jailCards -= 1;
+    pushLog(room, `✨ 一股神秘力量销毁了 ${target.name} 的出狱卡`, 'jail');
   } else if (type === 'hostSkip') {
     target.skipTurns = (target.skipTurns || 0) + 1;
     pushLog(room, `✨ ${target.name} 被神秘力量定住了`, 'info');
