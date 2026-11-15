@@ -267,6 +267,13 @@ button, input { font: inherit; color: inherit; }
 .subtitle.kind-jail { border-color: rgba(240, 180, 216, 0.55); color: #ffd9ef; }
 .subtitle.kind-trade { border-color: rgba(233, 196, 134, 0.75); color: var(--gold); }
 .subtitle.kind-bankrupt { border-color: rgba(226, 87, 76, 0.6); color: #ffb3a6; }
+.subtitle.kind-event {
+  border-color: rgba(255, 200, 90, 0.85);
+  color: #ffe6ab;
+  font-weight: 800;
+  letter-spacing: 1px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55), 0 0 24px rgba(255, 190, 60, 0.25);
+}
 
 .board {
   position: relative;

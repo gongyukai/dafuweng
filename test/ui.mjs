@@ -216,6 +216,25 @@ if (await ev("!!window.__dmj")) {
   assert(hasBtn, '筹钱面板要有宣告破产按钮');
   console.log('✅ 筹钱面板与宣告破产按钮');
 }
+
+// 免租卡询问面板（需要 ?dev=1）
+if (await ev("!!window.__dmj")) {
+  await ev(`(() => {
+    const S = window.__dmj;
+    const room = S.net.host.room;
+    const me = room.players.find((p) => p.id === S.me);
+    const other = room.players.find((p) => p.id !== S.me);
+    room.debt = null;
+    room.owners[1] = other.id;
+    room.rentChoice = { payerId: me.id, ownerId: other.id, tile: 1, amount: 50 };
+    room.phase = 'rent';
+    S.net.host.publish();
+  })()`);
+  await until("!!document.querySelector('[data-act=\"useShield\"]') && !!document.querySelector('[data-act=\"payRent\"]')", '免租卡询问');
+  await ev("document.querySelector('[data-act=\"payRent\"]').click()");
+  await sleep(300);
+  console.log('✅ 免租卡询问面板（使用 / 付租）');
+}
 await ev("document.querySelector('#modalClose').click()");
 
 // 7. 截图

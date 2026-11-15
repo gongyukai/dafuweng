@@ -44,16 +44,16 @@ const BOT_NAMES = ['阿福', '小美', '老王', '阿强', '丽丽'];
 export const MISSION_MIN_ROUND = 5;
 
 export const MISSIONS = [
-  { id: 'monopoly', text: '集齐任意一组同色地块' },
-  { id: 'cash', text: '现金达到 ¥2200' },
-  { id: 'lands', text: '拥有 8 块地产' },
-  { id: 'houses', text: '建成 3 栋房子' },
-  { id: 'rails', text: '拥有 3 个车站' },
+  { id: 'monopoly', text: '集齐任意一组同色地块', reward: 800 },
+  { id: 'cash', text: '现金达到 ¥2200', reward: 500 },
+  { id: 'lands', text: '拥有 8 块地产', reward: 700 },
+  { id: 'houses', text: '建成 3 栋房子', reward: 600 },
+  { id: 'rails', text: '拥有 3 个车站', reward: 900 },
 ];
 
 export const ITEMS = {
   dice: { name: '遥控骰子', desc: '指定本次骰子总点数（2–12）' },
-  shield: { name: '免租卡', desc: '下一次被收租自动抵消' },
+  shield: { name: '免租卡', desc: '被收租时可以选择是否抵消' },
   demolish: { name: '拆迁卡', desc: '拆掉对手一栋房子' },
   equalize: { name: '均富卡', desc: '所有玩家现金平均' },
 };
@@ -126,6 +126,7 @@ export function createRoom(code) {
     lastCard: null,
     trade: null,
     debt: null,
+    rentChoice: null,
     event: null,
     missionWin: null,
     missionsEnabled: false,
@@ -195,6 +196,7 @@ export function resetRoom(room) {
     p.missionDone = false;
     p.forcedDice = 0;
     p.skipTurns = 0;
+    p.jailCount = 0;
   }
   pushLog(room, '新的一局开始了，等待房主开局', 'system');
 }
@@ -227,6 +229,7 @@ export function addPlayer(room, name, opts = {}) {
     mission: null,
     missionDone: false,
     skipTurns: 0,
+    jailCount: 0,
     persona: opts.persona || (opts.isBot ? PERSONA_IDS[Math.floor(Math.random() * PERSONA_IDS.length)] : null),
     joinedAt: Date.now(),
   };
@@ -388,6 +391,7 @@ export function startGame(room) {
     p.forcedDice = 0;
     p.missionDone = false;
     p.skipTurns = 0;
+    p.jailCount = 0;
   }
   room.owners = {};
   room.houses = {};
@@ -618,7 +622,12 @@ function goToJail(room, p) {
   p.inJail = true;
   p.jailTurns = 0;
   room.again = false;
-  pushLog(room, `${p.name} 被送进监狱`, 'jail');
+  p.jailCount = (p.jailCount || 0) + 1;
+  pushLog(room, `${p.name} 被送进监狱（第 ${p.jailCount} 次）`, 'jail');
+  if (p.jailCount % 3 === 0) {
+    p.jailCards = (p.jailCards || 0) + 1;
+    pushLog(room, `${p.name} 入狱满 3 次，获得一张保释卡`, 'jail');
+  }
 }
 
 // ---------------- 道具 ----------------
@@ -788,7 +797,13 @@ function resolveLanding(room, p, depth = 0) {
       } else {
         const owner = byId(room, ownerId);
         const info = rentInfo(room, tile.i);
-        if (p.items.includes('shield')) {
+        if (p.items.includes('shield') && !p.isBot) {
+          room.rentChoice = { payerId: p.id, ownerId, tile: tile.i, amount: info.total };
+          room.phase = 'rent';
+          pushLog(room, `${p.name} 踩到 ${owner.name} 的 ${tile.name}，可以用免租卡抵消 ¥${info.total}`, 'rent');
+          return;
+        }
+        if (p.items.includes('shield') && p.isBot) {
           p.items = p.items.filter((x) => x !== 'shield');
           pushLog(room, `${p.name} 用免租卡抵消了 ${owner.name} 的 ${tile.name} 租金 ¥${info.total}`, 'card');
         } else {
@@ -825,7 +840,7 @@ function resolveLanding(room, p, depth = 0) {
 function triggerEvent(room) {
   const ev = EVENTS[Math.floor(room.rng() * EVENTS.length)];
   room.event = { id: ev.id, round: room.round };
-  pushLog(room, `【${ev.name}】${ev.text}`, 'system');
+  pushLog(room, `【${ev.name}】${ev.text}`, 'event');
   if (ev.id === 'typhoon') {
     for (const p of alivePlayers(room)) {
       const tiles = ownedTiles(room, p.id).filter((i) => (room.houses[i] || 0) > 0);
@@ -879,16 +894,16 @@ function checkMissions(room) {
   for (const p of room.players) {
     if (p.bankrupt || !p.mission || p.missionDone) continue;
     if (!missionMet(room, p)) continue;
+    const m = MISSIONS.find((x) => x.id === p.mission);
+    if (!m) continue;
     p.missionDone = true;
-    const text = (MISSIONS.find((m) => m.id === p.mission) || {}).text || '';
-    pushLog(room, `🎯 ${p.name} 完成了秘密任务「${text}」，结算时净资产 +20%`, 'system');
+    p.cash += m.reward;
+    pushLog(room, `🎯 ${p.name} 完成秘密任务「${m.text}」，向所有人公开并立即获得 ¥${m.reward}`, 'system');
   }
 }
 
-// 结算时把秘密任务加成算进去
 export function finalWorth(room, p) {
-  const base = netWorth(room, p);
-  return p.missionDone ? Math.round(base * 1.2) : base;
+  return netWorth(room, p);
 }
 
 function finalizeRanking(room) {
@@ -904,6 +919,7 @@ function nextTurn(room) {  if (room.phase === 'ended') return;
   const n = room.players.length;
   const prev = room.turn;
   room.debt = null;
+  room.rentChoice = null;
   for (let k = 1; k <= n; k++) {
     const i = (prev + k) % n;
     const p = room.players[i];
@@ -958,9 +974,9 @@ function settleByNetWorth(room) {
   room.winnerId = ranked[0].p.id;
   room.missionWin = null;
   finalizeRanking(room);
-  pushLog(room, `达到 ${room.roundLimit} 回合上限，按净资产结算（秘密任务 +20%）：`, 'system');
+  pushLog(room, `达到 ${room.roundLimit} 回合上限，按净资产结算：`, 'system');
   for (const { p, v } of ranked) {
-    pushLog(room, `${p.name} 净资产 ¥${v}${p.missionDone ? '（含任务加成）' : ''}`, 'info');
+    pushLog(room, `${p.name} 净资产 ¥${v}`, 'info');
   }
   pushLog(room, `🏆 ${ranked[0].p.name} 以 ¥${ranked[0].v} 获胜`, 'system');
 }
@@ -1025,7 +1041,7 @@ function doRoll(room) {
   room.again = dbl;
   moveBy(room, p, total);
   resolveLanding(room, p);
-  if (room.phase === 'ended' || room.phase === 'debt') return;
+  if (room.phase === 'ended' || room.phase === 'debt' || room.phase === 'rent') return;
   room.phase = room.pendingBuy != null ? 'buy' : room.again && !p.inJail ? 'roll' : 'end';
 }
 
@@ -1169,6 +1185,11 @@ export function act(room, playerId, action) {
 // 防止掉线/幽灵玩家卡死对局：超时自动跳过
 export function tickStall(room, now = Date.now()) {
   if (room.phase === 'lobby' || room.phase === 'ended') return false;
+  if (room.phase === 'rent' && room.rentChoice) {
+    const payer = byId(room, room.rentChoice.payerId);
+    if (payer) act(room, payer.id, { type: 'payRent' });
+    return true;
+  }
   const cur = currentPlayer(room);
   if (!cur || cur.bankrupt) return false;
   if (!room.turnStartedAt) { room.turnStartedAt = now; return false; }
@@ -1194,10 +1215,11 @@ function handleHost(room, host, action) {
     target.cash = Math.max(0, target.cash + amount);
     pushLog(room, `✨ 一股神秘力量拨动了 ${target.name} 的钱袋`, 'money');
   } else if (type === 'hostJail') {
-    target.pos = 10;
-    target.inJail = true;
-    target.jailTurns = 0;
+    goToJail(room, target);
     pushLog(room, `✨ 一股神秘力量把 ${target.name} 送进了监狱`, 'jail');
+  } else if (type === 'hostJailCard') {
+    target.jailCards = (target.jailCards || 0) + 1;
+    pushLog(room, `✨ ${target.name} 获得了一张保释卡`, 'jail');
   } else if (type === 'hostSkip') {
     target.skipTurns = (target.skipTurns || 0) + 1;
     pushLog(room, `✨ ${target.name} 被神秘力量定住了`, 'info');
@@ -1305,7 +1327,7 @@ function actInner(room, playerId, action) {
       if (p.id !== room.hostId) return fail('只有房主能设置胜利条件');
       room.missionsEnabled = String(action.enabled) === '1' || action.enabled === true;
       room.seq++;
-      pushLog(room, room.missionsEnabled ? '本局开启秘密任务（结算 +20%）' : '本局为经典胜负（无秘密任务）', 'system');
+      pushLog(room, room.missionsEnabled ? '本局开启秘密任务（完成即得现金奖励）' : '本局为经典胜负（无秘密任务）', 'system');
       return ok();
     }
     return fail('游戏还没有开始');
@@ -1323,6 +1345,30 @@ function actInner(room, playerId, action) {
   if (type && type.startsWith('host')) {
     if (p.id !== room.hostId) return fail('只有房主能这么做');
     return handleHost(room, p, action);
+  }
+
+  if (room.phase === 'rent' && room.rentChoice) {
+    const rc = room.rentChoice;
+    if (p.id !== rc.payerId) return fail('等待对方决定');
+    const owner = byId(room, rc.ownerId);
+    if (type === 'useShield') {
+      if (!p.items.includes('shield')) return fail('没有免租卡');
+      p.items = p.items.filter((x) => x !== 'shield');
+      room.rentChoice = null;
+      pushLog(room, `${p.name} 用免租卡抵消了 ${owner ? owner.name : '对方'} 的租金 ¥${rc.amount}`, 'card');
+      room.phase = room.again && !p.inJail ? 'roll' : 'end';
+      room.seq++;
+      return ok();
+    }
+    if (type === 'payRent') {
+      room.rentChoice = null;
+      pushLog(room, `${p.name} 支付租金 ¥${rc.amount} 给 ${owner ? owner.name : '对方'}`, 'rent');
+      if (charge(room, p, rc.amount, rc.ownerId) === 'debt') { room.seq++; return ok(); }
+      room.phase = room.again && !p.inJail ? 'roll' : 'end';
+      room.seq++;
+      return ok();
+    }
+    return fail('请选择使用免租卡或支付租金');
   }
 
   if (room.phase === 'debt') {
@@ -1560,6 +1606,7 @@ export function view(room, youId) {
     lastCard: room.lastCard,
     trade: currentTrade(room),
     debt: room.debt ? { payerId: room.debt.payerId, amount: room.debt.amount, creditorId: room.debt.creditorId } : null,
+    rentChoice: room.rentChoice ? { payerId: room.rentChoice.payerId, ownerId: room.rentChoice.ownerId, tile: room.rentChoice.tile, amount: room.rentChoice.amount } : null,
     event: room.event && room.event.round === room.round ? room.event : null,
     missionWin: room.missionWin,
     missionMinRound: MISSION_MIN_ROUND,

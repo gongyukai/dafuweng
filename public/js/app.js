@@ -39,6 +39,7 @@ const PIPS = {
 };
 
 const MISSION_TEXT = Object.fromEntries(MISSIONS.map((m) => [m.id, m.text]));
+const MISSION_REWARD = Object.fromEntries(MISSIONS.map((m) => [m.id, m.reward || 0]));
 const EVENT_TEXT = Object.fromEntries(EVENTS.map((e) => [e.id, e]));
 const ITEM_ICON = {
   dice: 'assets/ui/dice-d6.svg',
@@ -111,7 +112,7 @@ function getName() {
 
 // ---------------- 行动字幕 ----------------
 
-const SUB_KINDS = new Set(['dice', 'money', 'rent', 'buy', 'card', 'jail', 'build', 'bankrupt', 'trade']);
+const SUB_KINDS = new Set(['dice', 'money', 'rent', 'buy', 'card', 'jail', 'build', 'bankrupt', 'trade', 'event']);
 const subQueue = [];
 let subBusy = false;
 let lastLogId = null;
@@ -662,7 +663,7 @@ function actionLobby(v, isHost, me) {
   const rounds = [20, 35, 50].map((n) => `<button class="round-opt${v.roundLimit === n ? ' on' : ''}" data-act="setRounds" data-rounds="${n}" ${isHost ? '' : 'disabled'}>${n}</button>`).join('');
   const on = !!v.missionsEnabled;
   const missionBtns = `<button class="round-opt${on ? '' : ' on'}" data-act="setMissions" data-enabled="0" ${isHost ? '' : 'disabled'}>关（经典）</button>
-    <button class="round-opt${on ? ' on' : ''}" data-act="setMissions" data-enabled="1" ${isHost ? '' : 'disabled'}>开（+20%）</button>`;
+    <button class="round-opt${on ? ' on' : ''}" data-act="setMissions" data-enabled="1" ${isHost ? '' : 'disabled'}>开（现金奖励）</button>`;
   return `<div class="act-head"><h3>准备中</h3><span>${v.players.length}/6 人</span></div>
     <p class="act-msg">房间码 <b>${v.code}</b>，先选一个自己的棋子。人齐后房主开局。</p>
     ${pieceGrid(v, me)}
@@ -693,10 +694,11 @@ function missionProgress(v, me) {
 function missionCardHTML(v, me) {
   if (!me || !me.mission) return '';
   const text = MISSION_TEXT[me.mission] || me.mission;
+  const reward = MISSION_REWARD[me.mission] || 0;
   return `<div class="mission-card${me.missionDone ? ' done' : ''}">
     <span class="mc-ico">${mi('assets/ui/bullseye.svg')}</span>
     <div class="mc-body"><b>秘密任务</b><span>${esc(text)}</span></div>
-    <em>${me.missionDone ? '已完成 · 结算 +20%' : missionProgress(v, me)}</em>
+    <em>${me.missionDone ? `已完成 · +¥${fmt(reward)}` : `奖励 ¥${fmt(reward)}`}</em>
   </div>`;
 }
 
@@ -728,7 +730,7 @@ function actionEnded(v, isHost) {
     <table>${rank.map((r) => {
       const p = v.players.find((x) => x.id === r.id);
       const m = p && p.mission ? MISSION_TEXT[p.mission] : '';
-      const bonus = r.missionDone ? ' · 已完成 +20%' : '';
+      const bonus = r.missionDone ? ' · 已完成' : '';
       return `<tr><td>${esc(r.name)}${m ? `<br><small class="mission-line">任务：${esc(m)}${bonus}</small>` : ''}</td><td>¥${fmt(r.worth)}</td></tr>`;
     }).join('')}</table>
     ${isHost
@@ -985,6 +987,25 @@ function renderAction(v) {  const me = v.players.find((p) => p.id === S.me);
   if (v.phase === 'ended') { el.innerHTML = actionEnded(v, v.hostId === S.me); return; }
 
   const myTurn = v.turnId === S.me;
+  if (v.phase === 'rent' && v.rentChoice) {
+    const rc = v.rentChoice;
+    const owner = v.players.find((p) => p.id === rc.ownerId);
+    const payer = v.players.find((p) => p.id === rc.payerId);
+    let h = missionCardHTML(v, me);
+    if (rc.payerId === S.me) {
+      h += `<div class="act-head"><h3>被收租</h3><span>¥${fmt(rc.amount)}</span></div>
+        <p class="act-msg">你踩到了 ${esc(owner ? owner.name : '对方')} 的 ${esc(BOARD[rc.tile] ? BOARD[rc.tile].name : '地产')}，租金 <b>¥${fmt(rc.amount)}</b>。要使用免租卡吗？</p>
+        <div class="btn-row">
+          <button class="btn primary big" data-act="useShield">使用免租卡</button>
+          <button class="btn big" data-act="payRent">付租金 ¥${fmt(rc.amount)}</button>
+        </div>`;
+    } else {
+      h += `<div class="act-head"><h3>等待中</h3></div>
+        <p class="act-msg">等待 <b>${esc(payer ? payer.name : '…')}</b> 决定是否使用免租卡…</p>`;
+    }
+    el.innerHTML = h;
+    return;
+  }
   if (v.phase === 'debt' && v.debt) {
     const debtor = v.players.find((p) => p.id === v.debt.payerId);
     const creditor = v.debt.creditorId ? v.players.find((p) => p.id === v.debt.creditorId) : null;
@@ -1265,6 +1286,7 @@ function hostPanelHTML() {
       </div></div>
       <div class="host-sec"><b>道具</b><div class="host-acts">
         ${Object.keys(ITEMS).map((id) => `<button data-host="item" data-item="${id}">${ITEMS[id].name}</button>`).join('')}
+        <button data-host="jailcard">出狱卡</button>
       </div></div>
       <div class="host-sec"><b>土地</b><div class="host-acts">
         <button data-host="land">改归属</button>
@@ -1338,6 +1360,7 @@ $('#modalCard').addEventListener('click', (e) => {
     else if (kind === 'unskip') S.net.send({ type: 'hostUnskip', targetId: t });
     else if (kind === 'dice') S.net.send({ type: 'hostDice', targetId: t, value: Number(hostBtn.dataset.value) });
     else if (kind === 'item') S.net.send({ type: 'hostItem', targetId: t, item: hostBtn.dataset.item });
+    else if (kind === 'jailcard') S.net.send({ type: 'hostJailCard', targetId: t });
     else if (kind === 'own') S.net.send({ type: 'hostOwn', targetId: t, tile: Number(hostBtn.dataset.tile) });
     else if (kind === 'clearland') S.net.send({ type: 'hostClearLand', targetId: t });
     else if (kind === 'bankrupt') S.net.send({ type: 'hostBankrupt', targetId: t });

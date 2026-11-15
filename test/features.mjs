@@ -61,7 +61,7 @@ console.log('\n秘密任务分配与可见性');
   expect(v0.players[1].mission === null, '看不到别人的任务');
 }
 
-console.log('\n任务达成改为结算加成');
+console.log('\n任务达成立即发奖励并公开');
 {
   const { room, players } = makeGame(3);
   room.round = 5;
@@ -75,11 +75,13 @@ console.log('\n任务达成改为结算加成');
   expect(r.ok, '结束回合正常');
   expect(room.phase !== 'ended', '任务达成不会提前结束对局');
   expect(players[0].missionDone === true, '任务标记为已完成');
+  expect(players[0].cash === 3700, `立即获得奖励 ¥500（实际 ${players[0].cash}）`);
   const v = view(room, players[1].id);
   expect(v.players.find((p) => p.id === players[0].id).missionDone === true, '其他人能看到任务已完成');
+  expect(room.log.some((l) => l.text.includes('现金达到 ¥2200')), '任务内容向所有人公开');
 }
 
-console.log('\n结算时任务加 20%');
+console.log('\n结算不再叠加任务加成');
 {
   const { room, players } = makeGame(3);
   players[0].mission = 'cash';
@@ -98,8 +100,8 @@ console.log('\n结算时任务加 20%');
   act(room, players[2].id, { type: 'end' });
   expect(room.phase === 'ended', '达到回合上限结算');
   const rank = room.finalRank;
-  expect(rank[0].id === players[0].id, '任务完成者胜出');
-  expect(rank[0].worth === 3600, `净资产含 20% 加成（实际 ${rank[0].worth}）`);
+  expect(rank[0].id === players[0].id, '现金最多者胜出');
+  expect(rank[0].worth === 3000, `结算不再加 20%（实际 ${rank[0].worth}）`);
 }
 
 console.log('\n任务未达成不会误判');
@@ -180,7 +182,7 @@ console.log('\n道具：均富卡');
   expect(players[0].cash === 300 && players[1].cash === 300, '两人现金都变成平均值');
 }
 
-console.log('\n道具：免租卡自动生效');
+console.log('\n道具：免租卡由玩家决定');
 {
   const { room, players } = makeGame(2);
   room.owners[3] = players[1].id;
@@ -191,8 +193,29 @@ console.log('\n道具：免租卡自动生效');
   room.phase = 'roll';
   const before = players[0].cash;
   act(room, players[0].id, { type: 'roll' });
-  expect(players[0].cash === before, '被收租时现金没减少');
+  expect(room.phase === 'rent', '被收租时停下来询问');
+  expect(players[0].cash === before && players[0].items.includes('shield'), '还没扣钱也没消耗道具');
+  act(room, players[0].id, { type: 'useShield' });
+  expect(players[0].cash === before, '使用免租卡后现金没减少');
   expect(players[0].items.length === 0, '免租卡已消耗');
+  expect(room.phase !== 'rent', '选择后回合继续');
+
+  const room2 = makeGame(2);
+  const a = room2.players[0];
+  const b = room2.players[1];
+  room2.room.owners[3] = b.id;
+  a.items = ['shield'];
+  a.pos = 0;
+  a.forcedDice = 3;
+  room2.room.turn = 0;
+  room2.room.phase = 'roll';
+  const cashBefore = a.cash;
+  const rent = rentInfo(room2.room, 3).total;
+  act(room2.room, a.id, { type: 'roll' });
+  expect(room2.room.phase === 'rent', '第二局也进入询问');
+  act(room2.room, a.id, { type: 'payRent' });
+  expect(a.cash === cashBefore - rent, `选择付租后扣了 ¥${rent}`);
+  expect(a.items.includes('shield'), '付租时保留免租卡');
 }
 
 console.log('\n全场事件');
@@ -205,6 +228,21 @@ console.log('\n全场事件');
   expect(room.round === 5, '进入第 5 回合');
   expect(room.event && room.event.round === 5, '触发了全场事件');
   expect(room.log.some((l) => /【.+】/.test(l.text)), '日志里播报了事件');
+  expect(room.log.some((l) => /【.+】/.test(l.text) && l.kind === 'event'), '事件以公告形式播报');
+}
+
+console.log('\n入狱三次获得保释卡');
+{
+  const { room, players } = makeGame(2);
+  const host = players[0];
+  const target = players[1];
+  act(room, host.id, { type: 'hostJail', targetId: target.id });
+  expect(target.jailCount === 1 && target.jailCards === 0, '第一次入狱没有保释卡');
+  act(room, host.id, { type: 'hostJail', targetId: target.id });
+  expect(target.jailCards === 0, '第二次仍然没有');
+  act(room, host.id, { type: 'hostJail', targetId: target.id });
+  expect(target.jailCount === 3 && target.jailCards === 1, '第三次入狱获得保释卡');
+  expect(act(room, host.id, { type: 'hostJailCard', targetId: target.id }).ok && target.jailCards === 2, '房主可以直接发保释卡');
 }
 
 console.log('\n电脑性格');
