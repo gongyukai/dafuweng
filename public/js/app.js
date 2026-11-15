@@ -722,7 +722,7 @@ function actionEnded(v, isHost) {
   const rank = v.finalRank && v.finalRank.length
     ? v.finalRank
     : [...v.players].sort((a, b) => b.cash - a.cash).map((p) => ({ id: p.id, name: p.name, worth: p.cash }));
-  const winnerWorth = rank.find((r) => r.id === v.winnerId);
+  const winnerWorth = rank.find((r) => r.id === v.winnerId) || rank[0] || null;
   return `<div class="over-card">
     <img class="trophy" src="${icon('1f3c6.svg')}" alt="">
     <h2>${esc(winner ? winner.name : '—')} 获胜</h2>

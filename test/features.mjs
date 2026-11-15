@@ -384,4 +384,49 @@ console.log('\n免租选择不会被心跳自动付掉');
   expect(room.phase !== 'rent', '超时后离开选择');
 }
 
+console.log('\n保释金不强制卖房');
+{
+  const { room, players } = makeGame(2);
+  room.missionsEnabled = false;
+  const p = players[0];
+  p.inJail = true;
+  p.jailTurns = 2;
+  p.pos = 10;
+  p.cash = 5;
+  room.owners[1] = p.id;
+  room.owners[3] = p.id;
+  room.turn = 0;
+  room.phase = 'roll';
+  p.forcedDice = 3; // 1 + 2，非双数
+  act(room, p.id, { type: 'roll' });
+  expect(room.phase === 'debt', '保释金不足时进入筹钱');
+  expect(room.owners[1] === p.id && room.owners[3] === p.id, '没有自动卖房');
+  act(room, p.id, { type: 'mortgage', i: 1 });
+  expect(room.phase === 'debt', '第一块抵押后仍差一点');
+  act(room, p.id, { type: 'mortgage', i: 3 });
+  expect(room.phase !== 'debt', '凑够保释金后自动结算');
+  expect(p.inJail === false && p.pos === 13, '交完保释金后正常走 3 格');
+}
+
+console.log('\n债务超时不会凭空消失');
+{
+  const { room, players } = makeGame(2);
+  room.missionsEnabled = false;
+  room.owners[3] = players[1].id;
+  players[0].cash = 0;
+  players[0].pos = 0;
+  players[0].forcedDice = 3;
+  room.turn = 0;
+  room.phase = 'roll';
+  act(room, players[0].id, { type: 'roll' });
+  expect(room.phase === 'debt', '先进入筹钱');
+  room.turnStartedAt = Date.now() - 130000;
+  tickStall(room);
+  expect(players[0].bankrupt || room.phase !== 'debt', '超时后债务被结算，不会消失');
+  if (players[0].bankrupt) {
+    expect(room.phase === 'ended', '破产后对局结束');
+    expect(room.finalRank && room.finalRank[0].worth > 0, '赢家净资产不为 0');
+  }
+}
+
 console.log(`\n🎉 新玩法单测全部通过（${passed} 项断言）`);

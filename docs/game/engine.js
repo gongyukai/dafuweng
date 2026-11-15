@@ -552,7 +552,7 @@ function transferCash(room, from, toId, amount) {
 }
 
 // 真人玩家现金不足时进入「筹钱」阶段，由玩家自己决定卖房/抵押；机器人仍然自动变卖
-function charge(room, payer, amount, creditorId = null) {
+function charge(room, payer, amount, creditorId = null, opts = {}) {
   if (!payer || payer.bankrupt || amount <= 0) return 'ok';
   if (payer.cash >= amount) {
     transferCash(room, payer, creditorId, amount);
@@ -569,6 +569,7 @@ function charge(room, payer, amount, creditorId = null) {
     amount,
     creditorId,
     resume: room.again && !payer.inJail ? 'roll' : 'end',
+    after: opts.after || null,
   };
   room.phase = 'debt';
   pushLog(room, `${payer.name} 需要支付 ¥${amount}，请卖房或抵押筹钱（也可宣告破产）`, 'money');
@@ -582,6 +583,17 @@ function settleDebt(room) {
   room.debt = null;
   if (!payer || payer.bankrupt) { room.phase = 'end'; return; }
   transferCash(room, payer, d.creditorId, d.amount);
+  if (d.after === 'jailMove') {
+    room.phase = 'end';
+    payer.inJail = false;
+    payer.jailTurns = 0;
+    const total = (room.dice[0] || 0) + (room.dice[1] || 0);
+    moveBy(room, payer, total);
+    resolveLanding(room, payer);
+    if (room.phase === 'rent' || room.phase === 'debt' || room.phase === 'ended') return;
+    room.phase = room.pendingBuy != null ? 'buy' : room.again && !payer.inJail ? 'roll' : 'end';
+    return;
+  }
   room.phase = d.resume || 'end';
   pushLog(room, `${payer.name} 付清 ¥${d.amount}`, 'money');
   checkEnd(room);
@@ -1009,19 +1021,26 @@ function doRoll(room) {
       pushLog(room, `${p.name} 掷出双数，成功出狱`, 'jail');
       moveBy(room, p, total);
       resolveLanding(room, p);
+      if (room.phase === 'rent' || room.phase === 'debt' || room.phase === 'ended') { room.again = false; return; }
       room.phase = room.pendingBuy != null ? 'buy' : 'end';
     } else {
       p.jailTurns += 1;
       if (p.jailTurns >= 3) {
-        pushLog(room, `${p.name} 三次未掷出双数，缴纳 ¥${JAIL_FINE} 保释金`, 'jail');
-        pay(room, p, JAIL_FINE, null);
-        if (!p.bankrupt && room.phase !== 'ended') {
-          p.inJail = false;
-          p.jailTurns = 0;
-          moveBy(room, p, total);
-          resolveLanding(room, p);
+        pushLog(room, `${p.name} 三次未掷出双数，需缴纳 ¥${JAIL_FINE} 保释金`, 'jail');
+        const st = charge(room, p, JAIL_FINE, null, { after: 'jailMove' });
+        if (st === 'debt' || p.bankrupt || room.phase === 'ended') {
+          room.again = false;
+          return;
         }
-        room.phase = room.phase === 'ended' ? 'ended' : room.pendingBuy != null ? 'buy' : 'end';
+        p.inJail = false;
+        p.jailTurns = 0;
+        moveBy(room, p, total);
+        resolveLanding(room, p);
+        if (room.phase === 'rent' || room.phase === 'debt' || room.phase === 'ended') {
+          room.again = false;
+          return;
+        }
+        room.phase = room.pendingBuy != null ? 'buy' : 'end';
       } else {
         pushLog(room, `${p.name} 仍在监狱（第 ${p.jailTurns} 回合）`, 'jail');
         room.phase = 'end';
@@ -1185,6 +1204,22 @@ export function act(room, playerId, action) {
 // 防止掉线/幽灵玩家卡死对局：超时自动跳过
 export function tickStall(room, now = Date.now()) {
   if (room.phase === 'lobby' || room.phase === 'ended') return false;
+  if (room.phase === 'debt' && room.debt) {
+    const payer = byId(room, room.debt.payerId);
+    if (!payer) return false;
+    const limit = payer.connected ? TURN_TIMEOUT_MS : TURN_TIMEOUT_OFFLINE_MS;
+    if (!room.turnStartedAt || now - room.turnStartedAt < limit) return false;
+    raiseFunds(room, payer, room.debt.amount);
+    if (payer.cash >= room.debt.amount) {
+      settleDebt(room);
+    } else {
+      const creditor = room.debt.creditorId;
+      room.debt = null;
+      bankrupt(room, payer, creditor);
+    }
+    room.seq++;
+    return true;
+  }
   if (room.phase === 'rent' && room.rentChoice) {
     const payer = byId(room, room.rentChoice.payerId);
     if (!payer) return false;
