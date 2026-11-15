@@ -1147,7 +1147,8 @@ $('#action').addEventListener('click', (e) => {
   const id = btn.dataset.id;
   const piece = btn.dataset.piece;
   const enabled = btn.dataset.enabled;
-  S.net.send({ type, i, id, piece, enabled });
+  const rounds = btn.dataset.rounds !== undefined ? Number(btn.dataset.rounds) : undefined;
+  S.net.send({ type, i, id, piece, enabled, rounds });
 });
 
 $('#logBody').addEventListener('scroll', (e) => {

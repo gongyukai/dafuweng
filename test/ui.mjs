@@ -83,6 +83,11 @@ if (hasStart) {
   assert(rounds === 3, `回合选择应有 3 项，实际 ${rounds}`);
   const missionDefaultOff = await ev("document.querySelector('[data-act=\"setMissions\"][data-enabled=\"0\"]')?.classList.contains('on')");
   assert(missionDefaultOff, '秘密任务默认应为关闭');
+  // 回合数选择
+  await ev("document.querySelector('[data-act=\"setRounds\"][data-rounds=\"20\"]').click()");
+  await sleep(400);
+  const chosenRounds = await ev("window.__dmj.view.roundLimit");
+  assert(chosenRounds === 20, `回合数应该能选到 20（实际 ${chosenRounds}）`);
   await ev("document.querySelector('[data-act=\"setMissions\"][data-enabled=\"1\"]').click()");
   await sleep(300);
   await ev("document.querySelectorAll('.piece-opt')[2].click()");
@@ -97,6 +102,8 @@ if (hasStart) {
   await ev("(() => { for (const ch of 'laoban') document.dispatchEvent(new KeyboardEvent('keydown', { key: ch })); })()");
   await until("!!document.querySelector('.host-chips')", '隐藏房主面板');
   const targetId = await ev("window.__dmj.view.players.find((p) => p.id !== window.__dmj.me).id");
+  await ev(`(() => { const S = window.__dmj; const room = S.net.host.room; const t = room.players.find((p) => p.id === ${JSON.stringify(targetId)}); t.mission = 'lands'; S.net.host.publish(); })()`);
+  await sleep(300);
   await ev(`document.querySelector('.host-chip[data-id="${targetId}"]').click()`);
   await sleep(300);
   const beforeCash = await ev(`window.__dmj.view.players.find((p) => p.id === ${JSON.stringify(targetId)}).cash`);
