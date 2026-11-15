@@ -10,6 +10,19 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const icon = (file) => `assets/twemoji/${file}`;
 
+// 第三方访问统计（Cloudflare Web Analytics）
+// 到 Cloudflare 后台拿到 token 后填进下面这行即可启用；留空则完全不加载、不上报
+const CF_ANALYTICS_TOKEN = '';
+
+function loadAnalytics() {
+  if (!CF_ANALYTICS_TOKEN) return;
+  const s = document.createElement('script');
+  s.defer = true;
+  s.src = 'https://static.cloudflareinsights.com/beacon.min.js';
+  s.setAttribute('data-cf-beacon', JSON.stringify({ token: CF_ANALYTICS_TOKEN }));
+  document.head.appendChild(s);
+}
+
 const S = {
   view: null,
   me: null,
@@ -35,8 +48,7 @@ const S = {
   hostSource: 'command',
 };
 
-const PIPS = {
-  1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8],
+const PIPS = {  1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8],
 };
 
 const MISSION_TEXT = Object.fromEntries(MISSIONS.map((m) => [m.id, m.text]));
@@ -1463,6 +1475,7 @@ async function boot() {
   const savedName = localStorage.getItem('dmj.name');
   if (savedName) $('#nameInput').value = savedName;
   $('#nameInput').focus();
+  loadAnalytics();
 
   const room = getQueryRoom();
   if (room) $('#codeInput').value = room;

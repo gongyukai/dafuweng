@@ -246,3 +246,14 @@ PeerJS 的 CDN 被拦了。可以自己托管 `peerjs.min.js`，或改用服务�
 - 命令行查看：`node scripts/stats.mjs`（可加服务地址参数）
 
 注意：统计只覆盖走 Node 服务器的对局，GitHub Pages 的房主直连模式没有中心服务器，不计入。
+
+## 访问统计（可选，Cloudflare Web Analytics）
+
+房主直连模式没有中心服务器，所以用第三方统计来看访问量。代码里已经留好位置，默认关闭、不上报：
+
+1. 注册/登录 Cloudflare（免费）：https://dash.cloudflare.com
+2. 左侧 `Web Analytics` → `Add a site` → 填 `gongyukai.github.io` → 复制 token
+3. 打开 `public/js/app.js`，找到 `const CF_ANALYTICS_TOKEN = '';`，把 token 填进引号
+4. 重新发布（`node scripts/make-pages.mjs` 后提交推送）
+
+启用后在 Cloudflare 后台能看到访问量、访客数、来源国家等；它统计的是「打开页面的人」，不是「实际开局人数」。
