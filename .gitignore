@@ -3,3 +3,7 @@ shots/
 screenshots/dice.png
 .DS_Store
 *.log
+# cloudflared binary (52MB) - keep out of git
+bin/
+# stats data
+data/

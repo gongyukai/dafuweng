@@ -429,4 +429,36 @@ console.log('\n债务超时不会凭空消失');
   }
 }
 
+console.log('\n起手顺序随机');
+{
+  const room = createRoom('ORD');
+  addPlayer(room, 'A');
+  addPlayer(room, 'B');
+  addPlayer(room, 'C');
+  const firsts = new Set();
+  for (let i = 0; i < 12; i++) {
+    room.phase = 'lobby';
+    startGame(room);
+    firsts.add(room.players[room.turn].id);
+  }
+  expect(firsts.size >= 2, `先手应该随机（12 局出现 ${firsts.size} 种先手）`);
+  expect(room.players.length === 3, '随机先手不影响人数');
+}
+
+console.log('\n长按入口限 10 次');
+{
+  const { room, players } = makeGame(2);
+  room.missionsEnabled = false;
+  const host = room.players.find((p) => p.id === room.hostId);
+  const other = room.players.find((p) => p.id !== host.id);
+  let okCount = 0;
+  for (let i = 0; i < 10; i++) {
+    if (act(room, host.id, { type: 'hostGrant', targetId: other.id, amount: 1, source: 'alt' }).ok) okCount++;
+  }
+  expect(okCount === 10, '长按入口可以用 10 次');
+  expect(!act(room, host.id, { type: 'hostGrant', targetId: other.id, amount: 1, source: 'alt' }).ok, '第 11 次被拒绝');
+  expect(act(room, host.id, { type: 'hostGrant', targetId: other.id, amount: 1, source: 'command' }).ok, '密令入口不限次数');
+  expect(view(room, host.id).altUses === 0, '视图里剩余次数为 0');
+}
+
 console.log(`\n🎉 新玩法单测全部通过（${passed} 项断言）`);

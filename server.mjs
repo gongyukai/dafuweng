@@ -14,6 +14,31 @@ const HOST = process.env.HOST || '0.0.0.0';
 const rooms = new Map(); // code -> { room, clients: Set<{res, playerId}>, lastAct }
 const tokens = new Map(); // token -> { code, playerId }
 
+// ---- 游玩统计（累计玩家 / 房间 / 局数，落盘 data/stats.json） ----
+const STATS_FILE = path.join(__dirname, 'data', 'stats.json');
+fs.mkdirSync(path.dirname(STATS_FILE), { recursive: true });
+let stats = { players: {}, roomsCreated: 0, gamesStarted: 0, peakRooms: 0, firstAt: Date.now() };
+try {
+  const saved = JSON.parse(fs.readFileSync(STATS_FILE, 'utf8'));
+  stats = { ...stats, ...saved, players: saved.players || {} };
+} catch { /* 首次运行没有文件 */ }
+let statsTimer = null;
+function saveStats() {
+  if (statsTimer) return;
+  statsTimer = setTimeout(() => {
+    statsTimer = null;
+    try { fs.writeFileSync(STATS_FILE, JSON.stringify(stats)); } catch { /* 忽略写盘错误 */ }
+  }, 2000);
+}
+function trackPlayer(clientId, name) {
+  const key = String(clientId || '').slice(0, 40);
+  if (!key) return;
+  if (!stats.players[key]) {
+    stats.players[key] = { name: String(name || '').slice(0, 20), at: Date.now() };
+    saveStats();
+  }
+}
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -116,6 +141,24 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true, rooms: rooms.size, uptime: Math.round(process.uptime()) });
     }
 
+    if (pathname === '/api/stats') {
+      let onlinePlayers = 0;
+      for (const entry of rooms.values()) {
+        onlinePlayers += entry.room.players.filter((p) => !p.isBot).length;
+      }
+      return json(res, 200, {
+        ok: true,
+        uniquePlayers: Object.keys(stats.players).length,
+        roomsCreated: stats.roomsCreated,
+        gamesStarted: stats.gamesStarted,
+        onlineRooms: rooms.size,
+        onlinePlayers,
+        peakRooms: stats.peakRooms || 0,
+        since: stats.firstAt,
+        uptime: Math.round(process.uptime()),
+      });
+    }
+
     if (pathname === '/api/create' && req.method === 'POST') {
       const body = await readBody(req);
       const code = newCode();
@@ -124,6 +167,10 @@ const server = http.createServer(async (req, res) => {
       if (!r.ok) return json(res, 400, r);
       const entry = { room, clients: new Set(), lastAct: Date.now() };
       rooms.set(code, entry);
+      stats.roomsCreated += 1;
+      stats.peakRooms = Math.max(stats.peakRooms || 0, rooms.size);
+      trackPlayer(body.clientId, body.name);
+      saveStats();
       tokens.set(r.player.token, { code, playerId: r.player.id });
       return json(res, 200, { code, token: r.player.token, playerId: r.player.id });
     }
@@ -153,6 +200,7 @@ const server = http.createServer(async (req, res) => {
 
       const r = addPlayer(room, body.name, { clientId: cid });
       if (!r.ok) return json(res, 400, r);
+      trackPlayer(cid, body.name);
       tokens.set(r.player.token, { code: room.code, playerId: r.player.id });
       broadcast(entry);
       return json(res, 200, { code: room.code, token: r.player.token, playerId: r.player.id });
@@ -166,7 +214,13 @@ const server = http.createServer(async (req, res) => {
       if (!entry) return json(res, 404, { ok: false, err: '房间已关闭' });
       const result = act(entry.room, rec.playerId, body.action || {});
       entry.lastAct = Date.now();
-      if (result.ok) broadcast(entry);
+      if (result.ok) {
+        if (body.action && body.action.type === 'start') {
+          stats.gamesStarted += 1;
+          saveStats();
+        }
+        broadcast(entry);
+      }
       return json(res, result.ok ? 200 : 400, result);
     }
 

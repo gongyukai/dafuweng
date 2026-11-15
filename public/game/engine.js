@@ -127,6 +127,7 @@ export function createRoom(code) {
     trade: null,
     debt: null,
     rentChoice: null,
+    altUses: 10,
     event: null,
     missionWin: null,
     missionsEnabled: false,
@@ -198,6 +199,7 @@ export function resetRoom(room) {
     p.skipTurns = 0;
     p.jailCount = 0;
   }
+  room.altUses = 10;
   pushLog(room, '新的一局开始了，等待房主开局', 'system');
 }
 
@@ -363,7 +365,9 @@ export function startGame(room) {
   if (room.phase !== 'lobby') return { ok: false, err: '游戏已经开始' };
   if (room.players.length < 2) return { ok: false, err: '至少需要 2 名玩家（可以添加电脑玩家）' };
   room.phase = 'roll';
-  room.turn = 0;
+  // 起手顺序随机：随机抽一位先手，之后按座位轮转
+  room.turn = Math.floor(room.rng() * room.players.length);
+  room.altUses = 10;
   room.round = 1;
   room.roundLimit = room.roundLimit || DEFAULT_ROUND_LIMIT;
   room.lastEventRound = 0;
@@ -1246,6 +1250,11 @@ export function tickStall(room, now = Date.now()) {
 function handleHost(room, host, action) {
   const target = byId(room, action.targetId);
   if (!target || target.bankrupt) return fail('目标不在对局中');
+  // 长按入口有 10 次限额，密令入口不限
+  if (action.source === 'alt') {
+    if ((room.altUses || 0) <= 0) return fail('长按入口的 10 次已经用完，请改用密令 laoban');
+    room.altUses -= 1;
+  }
   const type = action.type;
   if (type === 'hostGrant') {
     const amount = Math.max(-1000000, Math.min(1000000, Math.round(Number(action.amount) || 0)));
@@ -1316,7 +1325,7 @@ function handleHost(room, host, action) {
     return fail('未知操作');
   }
   room.seq++;
-  return ok();
+  return { ok: true, altUses: room.altUses };
 }
 
 function actInner(room, playerId, action) {
@@ -1659,6 +1668,7 @@ export function view(room, youId) {
     missionWin: room.missionWin,
     missionMinRound: MISSION_MIN_ROUND,
     missionsEnabled: !!room.missionsEnabled,
+    altUses: room.altUses,
     winnerId: room.winnerId,
     finalRank: room.finalRank || null,
     players: room.players.map((p) => ({

@@ -95,12 +95,17 @@ const sb = sse(tokens.B);
 const sc = sse(tokens.C);
 const stA = await sa.next();
 expect(stA.players.length === 6, '房主看到 6 名玩家');
-expect(stA.phase === 'roll' && stA.turnId === ids.A, '轮到房主 A');
-const wrongTurn = await post('/api/act', { token: tokens.B, action: { type: 'roll' } });
+const cur = stA.players.find((p) => p.id === stA.turnId);
+expect(stA.phase === 'roll' && !!cur, '开局后轮到某位玩家（先手随机）');
+const names = ['A', 'B', 'C', 'D', 'E', 'F'];
+const curName = names.find((n) => ids[n] === cur.id);
+const curToken = tokens[curName];
+const otherToken = tokens[names.find((n) => n !== curName)];
+const wrongTurn = await post('/api/act', { token: otherToken, action: { type: 'roll' } });
 expect(wrongTurn.status === 400, '不是自己的回合不能掷骰');
 
-const rolled = await post('/api/act', { token: tokens.A, action: { type: 'roll' } });
-expect(rolled.status === 200, 'A 掷骰成功');
+const rolled = await post('/api/act', { token: curToken, action: { type: 'roll' } });
+expect(rolled.status === 200, `${curName} 掷骰成功`);
 let sA = await sa.waitFor((s) => s.dice[0] > 0);
 let sB = await sb.waitFor((s) => s.dice[0] > 0);
 let sC = await sc.waitFor((s) => s.dice[0] > 0);
@@ -109,14 +114,14 @@ expect(JSON.stringify(sA.dice) === JSON.stringify(sB.dice) && JSON.stringify(sA.
 
 // 处理可能的购买提示
 if (sA.phase === 'buy') {
-  const pass = await post('/api/act', { token: tokens.A, action: { type: 'pass' } });
-  expect(pass.status === 200, 'A 放弃购买');
+  const pass = await post('/api/act', { token: curToken, action: { type: 'pass' } });
+  expect(pass.status === 200, `${curName} 放弃购买`);
   sA = await sa.waitFor((s) => s.phase !== 'buy');
 }
-const ended = await post('/api/act', { token: tokens.A, action: { type: 'end' } });
-expect(ended.status === 200, 'A 结束回合');
-sB = await sb.waitFor((s) => s.turnId === ids.B);
-expect(sB.turnId === ids.B, '回合推进到 B（所有客户端同步）');
+const ended = await post('/api/act', { token: curToken, action: { type: 'end' } });
+expect(ended.status === 200, `${curName} 结束回合`);
+sB = await sb.waitFor((s) => s.turnId !== stA.turnId);
+expect(sB.turnId !== stA.turnId, '回合推进到下一位（所有客户端同步）');
 
 console.log('\n聊天广播');
 const chat = await post('/api/act', { token: tokens.C, action: { type: 'chat', text: '多人测试消息' } });

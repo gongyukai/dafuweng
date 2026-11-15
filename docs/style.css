@@ -947,6 +947,8 @@ button, input { font: inherit; color: inherit; }
 .host-chip.on { border-color: var(--gold); color: var(--gold); background: rgba(233, 196, 134, 0.14); }
 .host-target { font-size: 13px; color: var(--muted); margin: 6px 0 10px; }
 .host-target b { color: var(--gold); }
+.alt-hint { color: #ffb4a8; }
+.alt-hint b { color: #ffd0a0; }
 .host-grid { display: flex; flex-direction: column; gap: 8px; max-height: 52vh; overflow-y: auto; margin-bottom: 12px; }
 .host-sec {
   display: flex;

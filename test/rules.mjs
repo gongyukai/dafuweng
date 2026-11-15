@@ -26,6 +26,7 @@ function makeGame(players = 2) {
   const list = [];
   for (let i = 0; i < players; i++) list.push(addPlayer(room, `玩家${i + 1}`).player);
   startGame(room);
+  room.turn = 0; // 测试默认从第一位玩家开始（正式游戏里先手是随机的）
   room.rng = seqRng([0.5, 0.5]);
   return { room, p1: list[0], p2: list[1], list };
 }

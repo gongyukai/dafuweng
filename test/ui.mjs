@@ -89,7 +89,7 @@ if (hasStart) {
   await sleep(400);
   console.log(`✅ 棋子选择器：${pieces} 种可选，回合数 ${rounds} 档`);
   await ev("document.querySelector('button[data-act=\"start\"]').click()");
-  await until("!!document.querySelector('button[data-act=\"roll\"]')", '开局后的掷骰按钮');
+  await until("!!document.querySelector('button[data-act=\"roll\"]')", '开局后的掷骰按钮', 30000);
   await until("!!document.querySelector('.mission-card')", '秘密任务卡');
   console.log('✅ 大厅开始游戏，秘密任务已下发');
 
@@ -122,25 +122,41 @@ if (hasStart) {
   assert(pos === 5, `房主可以传送（落点 ${pos}）`);
   await ev("document.querySelector('#modalClose').click()");
   console.log('✅ 隐藏房主面板可用（加钱 + 改土地 + 传送）');
+
+  // 长按入口：限 10 次，用一次要提示剩余
+  await ev("document.querySelector('.brand').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))");
+  await sleep(1800);
+  await until("!!document.querySelector('.alt-hint')", '长按入口面板', 5000);
+  const altBefore = await ev("window.__dmj.view.altUses");
+  await ev("document.querySelector('.host-acts [data-host=\"cash\"][data-amount=\"1000\"]').click()");
+  await sleep(600);
+  const altAfter = await ev("window.__dmj.view.altUses");
+  assert(altAfter === altBefore - 1, `长按入口消耗一次（${altBefore} → ${altAfter}）`);
+  await ev("document.querySelector('#modalClose').click()");
+  console.log('✅ 长按入口触发，剩余次数会递减');
 }
 
 // 3. 掷骰子
 const hasRoll = await ev("!!document.querySelector('button[data-act=\"roll\"]')");
 assert(hasRoll, '没有掷骰子按钮');
 await ev("document.querySelector('button[data-act=\"roll\"]').click()");
-await until("document.querySelector('#logBody').textContent.includes('掷出')", '掷骰日志');
-await until("document.querySelector('#subtitle').textContent.includes('掷出')", '行动字幕', 12000);
-console.log('✅ 行动字幕显示：' + (await ev("document.querySelector('#subtitle').textContent")));
-const frames = await ev(`(async () => {
-  const el = document.querySelector('.tk');
-  if (!el) return 0;
+// 立刻开始采样，避免等字幕时棋子已经走完
+const anim = JSON.parse(await ev(`(async () => {
+  const el = document.querySelector('.tk.me') || document.querySelector('.tk');
   const seen = new Set();
-  for (let i = 0; i < 24; i++) { seen.add(el.style.transform); await new Promise(r => setTimeout(r, 55)); }
-  return seen.size;
-})()`);
-assert(frames >= 2, `棋子应有逐格移动动画，实际位置变化 ${frames} 次`);
-console.log(`✅ 棋子移动动画：${frames} 个中间位置`);
-console.log('✅ 掷骰子按钮生效，日志已更新');
+  let sawDice = false;
+  for (let i = 0; i < 30; i++) {
+    if (el) seen.add(el.style.transform);
+    if (document.querySelector('#subtitle').textContent.includes('掷出')) sawDice = true;
+    await new Promise((r) => setTimeout(r, 55));
+  }
+  return JSON.stringify({ frames: seen.size, sawDice });
+})()`));
+assert(anim.frames >= 2, `棋子应有逐格移动动画，实际位置变化 ${anim.frames} 次`);
+console.log(`✅ 棋子移动动画：${anim.frames} 个中间位置`);
+if (!anim.sawDice) await until("document.querySelector('#subtitle').textContent.includes('掷出')", '行动字幕', 20000);
+console.log('✅ 行动字幕显示：' + (await ev("document.querySelector('#subtitle').textContent")));
+await until("document.querySelector('#logBody').textContent.includes('掷出')", '掷骰日志');
 
 // 3. 处理可能的购买 / 结束回合，直到轮换到电脑
 const phase = await ev("document.querySelector('.act-head h3')?.textContent || ''");

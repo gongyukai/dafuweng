@@ -32,6 +32,7 @@ const S = {
   hostOpen: false,
   hostTarget: null,
   hostView: 'main',
+  hostSource: 'command',
 };
 
 const PIPS = {
@@ -1262,8 +1263,11 @@ function hostPanelHTML() {
       <div class="btn-row"><button class="btn" data-host="back">返回</button><button class="btn" id="modalClose">关闭</button></div>`;
   }
 
+  const srcHint = S.hostSource === 'alt'
+    ? `<p class="trade-hint alt-hint">长按入口 · 剩余 <b>${v.altUses == null ? 0 : v.altUses}</b> 次（用完请改用密令）</p>`
+    : '<p class="trade-hint">密令入口 · 不限次数</p>';
   return `<h2 class="trade-title">神秘力量</h2>
-    <p class="trade-hint">只有房主能看到这个面板，点击立即生效。</p>
+    ${srcHint}
     <div class="host-chips">${chips}</div>
     <div class="host-target">目标：<b>${esc(t.name)}</b> · <span>¥${fmt(t.cash)}</span></div>
     <div class="host-grid">
@@ -1303,10 +1307,11 @@ function hostPanelHTML() {
     <button class="btn wide" id="modalClose">关闭</button>`;
 }
 
-function openHostPanel() {
+function openHostPanel(source = 'command') {
   if (!isHostGame()) return;
   S.hostOpen = true;
   S.hostView = 'main';
+  S.hostSource = source;
   showModal(hostPanelHTML());
 }
 
@@ -1324,7 +1329,7 @@ document.addEventListener('keydown', (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key.length !== 1) return;
   hostKeys = (hostKeys + e.key.toLowerCase()).slice(-8);
-  if (hostKeys.endsWith('laoban')) { hostKeys = ''; openHostPanel(); }
+  if (hostKeys.endsWith('laoban')) { hostKeys = ''; openHostPanel('command'); }
 });
 
 // 隐蔽入口 2：长按左上角标题 1.5 秒
@@ -1332,7 +1337,7 @@ document.addEventListener('keydown', (e) => {
   const brand = document.querySelector('.brand');
   if (brand) {
     let timer = null;
-    const start = () => { clearTimeout(timer); timer = setTimeout(openHostPanel, 1500); };
+    const start = () => { clearTimeout(timer); timer = setTimeout(() => openHostPanel('alt'), 1500); };
     const stop = () => clearTimeout(timer);
     brand.addEventListener('pointerdown', start);
     brand.addEventListener('pointerup', stop);
@@ -1353,23 +1358,31 @@ $('#modalCard').addEventListener('click', (e) => {
     if (kind === 'back') { S.hostView = 'main'; refreshHostPanel(); return; }
     const t = S.hostTarget;
     if (!t || !S.net) return;
-    if (kind === 'tp') S.net.send({ type: 'hostTeleport', targetId: t, tile: Number(hostBtn.dataset.tile) });
-    else if (kind === 'cash') S.net.send({ type: 'hostGrant', targetId: t, amount: Number(hostBtn.dataset.amount) });
+    const sendHost = (act) => {
+      S.net.send({ ...act, targetId: t, source: S.hostSource });
+      if (S.hostSource === 'alt') {
+        setTimeout(() => {
+          if (S.view) toast(`长按入口剩余 ${S.view.altUses == null ? 0 : S.view.altUses} 次`);
+        }, 500);
+      }
+    };
+    if (kind === 'tp') sendHost({ type: 'hostTeleport', tile: Number(hostBtn.dataset.tile) });
+    else if (kind === 'cash') sendHost({ type: 'hostGrant', amount: Number(hostBtn.dataset.amount) });
     else if (kind === 'setcash') {
       const input = $('#hostCashInput');
-      S.net.send({ type: 'hostSetCash', targetId: t, amount: Number(input ? input.value : 0) });
-    } else if (kind === 'jail') S.net.send({ type: 'hostJail', targetId: t });
-    else if (kind === 'release') S.net.send({ type: 'hostRelease', targetId: t });
-    else if (kind === 'skip') S.net.send({ type: 'hostSkip', targetId: t });
-    else if (kind === 'unskip') S.net.send({ type: 'hostUnskip', targetId: t });
-    else if (kind === 'dice') S.net.send({ type: 'hostDice', targetId: t, value: Number(hostBtn.dataset.value) });
-    else if (kind === 'item') S.net.send({ type: 'hostItem', targetId: t, item: hostBtn.dataset.item });
-    else if (kind === 'jailcard') S.net.send({ type: 'hostJailCard', targetId: t });
-    else if (kind === 'removeItem') S.net.send({ type: 'hostRemoveItem', targetId: t, item: hostBtn.dataset.item });
-    else if (kind === 'removeJail') S.net.send({ type: 'hostRemoveJailCard', targetId: t });
-    else if (kind === 'own') S.net.send({ type: 'hostOwn', targetId: t, tile: Number(hostBtn.dataset.tile) });
-    else if (kind === 'clearland') S.net.send({ type: 'hostClearLand', targetId: t });
-    else if (kind === 'bankrupt') S.net.send({ type: 'hostBankrupt', targetId: t });
+      sendHost({ type: 'hostSetCash', amount: Number(input ? input.value : 0) });
+    } else if (kind === 'jail') sendHost({ type: 'hostJail' });
+    else if (kind === 'release') sendHost({ type: 'hostRelease' });
+    else if (kind === 'skip') sendHost({ type: 'hostSkip' });
+    else if (kind === 'unskip') sendHost({ type: 'hostUnskip' });
+    else if (kind === 'dice') sendHost({ type: 'hostDice', value: Number(hostBtn.dataset.value) });
+    else if (kind === 'item') sendHost({ type: 'hostItem', item: hostBtn.dataset.item });
+    else if (kind === 'jailcard') sendHost({ type: 'hostJailCard' });
+    else if (kind === 'removeItem') sendHost({ type: 'hostRemoveItem', item: hostBtn.dataset.item });
+    else if (kind === 'removeJail') sendHost({ type: 'hostRemoveJailCard' });
+    else if (kind === 'own') sendHost({ type: 'hostOwn', tile: Number(hostBtn.dataset.tile) });
+    else if (kind === 'clearland') sendHost({ type: 'hostClearLand' });
+    else if (kind === 'bankrupt') sendHost({ type: 'hostBankrupt' });
     return;
   }
   const diceBtn = e.target.closest('[data-dice]');
@@ -1436,6 +1449,16 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+async function loadServerStats() {
+  try {
+    const r = await fetch('/api/stats', { cache: 'no-store' });
+    const s = await r.json();
+    const el = $('#serverStats');
+    if (!el) return;
+    el.textContent = `本服累计 ${s.uniquePlayers} 位玩家 · ${s.gamesStarted} 局 · 当前在线 ${s.onlinePlayers} 人`;
+  } catch { /* 统计失败不影响游戏 */ }
+}
+
 async function boot() {
   const savedName = localStorage.getItem('dmj.name');
   if (savedName) $('#nameInput').value = savedName;
@@ -1448,6 +1471,7 @@ async function boot() {
   $('#startHint').textContent = S.hasServer
     ? '已检测到本地服务器：联机走服务器转发，最稳定（局域网 / 公网隧道都适用）。'
     : '当前是纯静态托管：联机使用 WebRTC，房主浏览器即主机，需要保持页面打开。';
+  if (S.hasServer) loadServerStats();
 
   if (room) {
     const sess = loadSession(room);
