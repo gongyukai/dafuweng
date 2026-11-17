@@ -46,6 +46,8 @@ const S = {
   hostTarget: null,
   hostView: 'main',
   hostSource: 'command',
+  unreadChat: 0,
+  chatSeen: null,
 };
 
 const PIPS = {  1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8],
@@ -266,6 +268,8 @@ function leave() {
   S.view = null;
   S.me = null;
   S.tokens.clear();
+  S.unreadChat = 0;
+  S.chatSeen = null;
   resetSubtitles();
   const url = new URL(location.href);
   url.searchParams.delete('room');
@@ -1072,6 +1076,34 @@ function renderChat(v) {
   if (nearBottom) el.scrollTop = el.scrollHeight;
 }
 
+// 聊天未读红点：不在聊天页时统计别人发来的新消息
+function syncChatBadge(v) {
+  const chats = (v && v.chat) || [];
+  const newest = chats.length ? chats[chats.length - 1].id : 0;
+  if (S.chatSeen == null) S.chatSeen = newest;
+  if (S.tab === 'chat') {
+    S.chatSeen = newest;
+    S.unreadChat = 0;
+  } else {
+    const others = chats.filter((c) => c.id > S.chatSeen && c.from !== S.me);
+    if (others.length) S.unreadChat += others.length;
+    if (newest > S.chatSeen) S.chatSeen = newest;
+  }
+  const tab = document.querySelector('.tab[data-tab="chat"]');
+  if (!tab) return;
+  let badge = tab.querySelector('.unread-badge');
+  if (S.unreadChat > 0) {
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'unread-badge';
+      tab.appendChild(badge);
+    }
+    badge.textContent = S.unreadChat > 99 ? '99+' : String(S.unreadChat);
+  } else if (badge) {
+    badge.remove();
+  }
+}
+
 // ---------------- 渲染入口 ----------------
 
 function render() {
@@ -1086,6 +1118,7 @@ function render() {
   renderAction(v);
   renderLog(v);
   renderChat(v);
+  syncChatBadge(v);
   syncSubtitles(v);
   refreshHostPanel();
 }
@@ -1162,7 +1195,7 @@ document.querySelectorAll('.tab').forEach((tab) => {
     tab.classList.add('active');
     S.tab = tab.dataset.tab;
     $('#chatForm').classList.toggle('hidden', S.tab !== 'chat');
-    if (S.view) { renderLog(S.view); renderChat(S.view); }
+    if (S.view) { renderLog(S.view); renderChat(S.view); syncChatBadge(S.view); }
     if (S.tab === 'chat') $('#chatInput').focus();
   });
 });

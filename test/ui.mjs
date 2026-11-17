@@ -258,6 +258,28 @@ if (await ev("!!window.__dmj")) {
   await sleep(300);
   console.log('✅ 免租卡询问面板（使用 / 付租）');
 }
+
+// 聊天未读红点（需要 ?dev=1）
+if (await ev("!!window.__dmj")) {
+  await ev("document.querySelector('.tab[data-tab=\"log\"]').click()");
+  await sleep(200);
+  await ev(`(() => {
+    const S = window.__dmj;
+    const room = S.net.host.room;
+    const other = room.players.find((p) => p.id !== S.me);
+    room.chatSeq = (room.chatSeq || 0) + 1;
+    room.chat.push({ id: room.chatSeq, from: other.id, name: other.name, text: '未读测试', t: Date.now() });
+    S.net.host.publish();
+  })()`);
+  await until("!!document.querySelector('.tab[data-tab=\"chat\"] .unread-badge')", '未读红点', 5000);
+  const badge = await ev("document.querySelector('.tab[data-tab=\"chat\"] .unread-badge').textContent");
+  assert(badge === '1', `未读数应为 1，实际 ${badge}`);
+  await ev("document.querySelector('.tab[data-tab=\"chat\"]').click()");
+  await sleep(300);
+  const gone = await ev("!document.querySelector('.unread-badge')");
+  assert(gone, '进入聊天后红点应消失');
+  console.log('✅ 聊天未读红点（1 条，进入后清除）');
+}
 await ev("document.querySelector('#modalClose').click()");
 
 // 7. 截图

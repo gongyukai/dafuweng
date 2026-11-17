@@ -188,6 +188,7 @@ button, input { font: inherit; color: inherit; }
 
 .tabs { display: flex; gap: 6px; margin-bottom: 8px; flex: none; }
 .tab {
+  position: relative;
   border: none;
   background: transparent;
   color: var(--muted);
@@ -197,6 +198,24 @@ button, input { font: inherit; color: inherit; }
   cursor: pointer;
 }
 .tab.active { background: rgba(255, 255, 255, 0.1); color: var(--text); }
+
+.unread-badge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #e2574c;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
 
 .log-body {
   flex: 1;
