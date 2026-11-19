@@ -44,12 +44,38 @@ const BOT_NAMES = ['阿福', '小美', '老王', '阿强', '丽丽'];
 export const MISSION_MIN_ROUND = 5;
 
 export const MISSIONS = [
-  { id: 'monopoly', text: '集齐任意一组同色地块', reward: 800 },
-  { id: 'cash', text: '现金达到 ¥2200', reward: 500 },
-  { id: 'lands', text: '拥有 8 块地产', reward: 700 },
-  { id: 'houses', text: '建成 3 栋房子', reward: 600 },
-  { id: 'rails', text: '拥有 3 个车站', reward: 900 },
+  { id: 'monopoly', min: 2, max: 6, target: () => 1, reward: { 2: 400, 3: 500, 4: 600, 5: 600, 6: 600 },
+    text: () => '集齐任意 1 组同色地块' },
+  { id: 'assets', min: 2, max: 6, target: () => 3200, reward: { 2: 600, 3: 600, 4: 600, 5: 600, 6: 600 },
+    text: () => '总资产达到 ¥3200' },
+  { id: 'lands', min: 2, max: 6, target: (n) => [13, 10, 9, 8, 6][n - 2], reward: { 2: 600, 3: 600, 4: 600, 5: 600, 6: 600 },
+    text: (t) => `拥有 ${t} 块地产` },
+  { id: 'houses', min: 2, max: 6, target: (n) => [4, 3, 3, 2, 2][n - 2], reward: { 2: 400, 3: 500, 4: 700, 5: 700, 6: 700 },
+    text: (t) => `建成 ${t} 栋房子` },
+  { id: 'rails', min: 2, max: 4, target: () => 2, reward: { 2: 700, 3: 700, 4: 700 },
+    text: () => '拥有 2 个车站' },
+  { id: 'rent', min: 2, max: 6, target: (n) => [400, 600, 800, 800, 800][n - 2], reward: { 2: 600, 3: 600, 4: 600, 5: 600, 6: 600 },
+    text: (t) => `累计收取租金 ¥${t}` },
+  { id: 'twoSets', min: 2, max: 6, target: () => 2, reward: { 2: 600, 3: 700, 4: 800, 5: 800, 6: 800 },
+    text: () => '集齐 2 组同色地块' },
+  { id: 'hotel', min: 2, max: 6, target: () => 1, reward: { 2: 600, 3: 700, 4: 800, 5: 800, 6: 800 },
+    text: () => '建成 1 座旅馆（5 栋房子）' },
+  { id: 'trade', min: 2, max: 6, target: () => 2, reward: { 2: 600, 3: 600, 4: 600, 5: 600, 6: 600 },
+    text: () => '完成 2 次玩家交易' },
+  { id: 'item', min: 2, max: 6, target: (n) => [6, 6, 6, 5, 4][n - 2], reward: { 2: 700, 3: 700, 4: 700, 5: 700, 6: 700 },
+    text: (t) => `使用 ${t} 张道具卡` },
 ];
+
+export function missionTarget(def, players) {
+  return typeof def.target === 'function' ? def.target(players) : def.target;
+}
+export function missionText(def, players) {
+  const t = missionTarget(def, players);
+  return typeof def.text === 'function' ? def.text(t, players) : def.text;
+}
+export function missionRewardBase(def, players) {
+  return (def.reward && def.reward[players]) || 600;
+}
 
 export const ITEMS = {
   dice: { name: '遥控骰子', desc: '指定本次骰子总点数（2–12）' },
@@ -195,6 +221,12 @@ export function resetRoom(room) {
     p.shield = false;
     p.mission = null;
     p.missionDone = false;
+    p.missionTarget = 0;
+    p.missionText = null;
+    p.missionRewardBase = 0;
+    p.rentIncome = 0;
+    p.tradesDone = 0;
+    p.itemsUsed = 0;
     p.forcedDice = 0;
     p.skipTurns = 0;
     p.jailCount = 0;
@@ -230,6 +262,12 @@ export function addPlayer(room, name, opts = {}) {
     shield: false,
     mission: null,
     missionDone: false,
+    missionTarget: 0,
+    missionText: null,
+    missionRewardBase: 0,
+    rentIncome: 0,
+    tradesDone: 0,
+    itemsUsed: 0,
     skipTurns: 0,
     jailCount: 0,
     persona: opts.persona || (opts.isBot ? PERSONA_IDS[Math.floor(Math.random() * PERSONA_IDS.length)] : null),
@@ -341,6 +379,8 @@ function handleTrade(room, p, action) {
     if (feeGet) { p.cash -= feeGet; pushLog(room, `${p.name} 为接手的抵押地产支付 10% 手续费 ¥${feeGet}`, 'money'); }
     if (feeGive) { from.cash -= feeGive; pushLog(room, `${from.name} 为接手的抵押地产支付 10% 手续费 ¥${feeGive}`, 'money'); }
     pushLog(room, `交易达成：${from.name} 得到 ${tradeText(room, trade.get)}，${p.name} 得到 ${tradeText(room, trade.give)}`, 'trade');
+    from.tradesDone = (from.tradesDone || 0) + 1;
+    p.tradesDone = (p.tradesDone || 0) + 1;
     room.trade = null;
     room.seq++;
     return ok();
@@ -379,9 +419,16 @@ export function startGame(room) {
   room.finalRank = null;
   room.event = null;
   room.missionWin = null;
-  const missionDeck = shuffle(MISSIONS, room.rng);
+  const n = room.players.length;
+  const pool = MISSIONS.filter((m) => n >= (m.min || 2) && n <= (m.max || 6));
+  const missionDeck = shuffle(pool, room.rng);
   room.players.forEach((p, i) => {
-    p.mission = room.missionsEnabled ? missionDeck[i % missionDeck.length].id : null;
+    if (!room.missionsEnabled) { p.mission = null; return; }
+    const def = missionDeck[i % missionDeck.length];
+    p.mission = def.id;
+    p.missionTarget = missionTarget(def, n);
+    p.missionText = missionText(def, n);
+    p.missionRewardBase = missionRewardBase(def, n);
   });
   for (const p of room.players) {
     p.cash = START_CASH;
@@ -396,6 +443,9 @@ export function startGame(room) {
     p.missionDone = false;
     p.skipTurns = 0;
     p.jailCount = 0;
+    p.rentIncome = 0;
+    p.tradesDone = 0;
+    p.itemsUsed = 0;
   }
   room.owners = {};
   room.houses = {};
@@ -555,16 +605,23 @@ function transferCash(room, from, toId, amount) {
   return paid;
 }
 
+function addRentIncome(room, creditorId, amount) {
+  const to = creditorId ? byId(room, creditorId) : null;
+  if (to && !to.bankrupt && amount > 0) to.rentIncome = (to.rentIncome || 0) + amount;
+}
+
 // 真人玩家现金不足时进入「筹钱」阶段，由玩家自己决定卖房/抵押；机器人仍然自动变卖
 function charge(room, payer, amount, creditorId = null, opts = {}) {
   if (!payer || payer.bankrupt || amount <= 0) return 'ok';
   if (payer.cash >= amount) {
     transferCash(room, payer, creditorId, amount);
+    addRentIncome(room, creditorId, amount);
     return 'ok';
   }
   if (payer.isBot) {
     raiseFunds(room, payer, amount);
     const paid = transferCash(room, payer, creditorId, amount);
+    addRentIncome(room, creditorId, paid);
     if (paid < amount) { bankrupt(room, payer, creditorId); return 'bankrupt'; }
     return 'ok';
   }
@@ -587,6 +644,7 @@ function settleDebt(room) {
   room.debt = null;
   if (!payer || payer.bankrupt) { room.phase = 'end'; return; }
   transferCash(room, payer, d.creditorId, d.amount);
+  addRentIncome(room, d.creditorId, d.amount);
   if (d.after === 'jailMove') {
     room.phase = 'end';
     payer.inJail = false;
@@ -676,6 +734,7 @@ function useItem(room, p, action) {
     if (room.phase !== 'roll') return fail('遥控骰子要在掷骰前使用');
     p.forcedDice = v;
     p.items.splice(idx, 1);
+    p.itemsUsed = (p.itemsUsed || 0) + 1;
     pushLog(room, `${p.name} 使用遥控骰子，下次点数 ${v}`, 'card');
     return ok();
   }
@@ -688,6 +747,7 @@ function useItem(room, p, action) {
     if ((room.houses[i] || 0) <= 0) return fail('那块地上没有房子');
     room.houses[i] -= 1;
     p.items.splice(idx, 1);
+    p.itemsUsed = (p.itemsUsed || 0) + 1;
     pushLog(room, `${p.name} 用拆迁卡拆掉了 ${tile.name} 的一栋房子`, 'card');
     return ok();
   }
@@ -699,6 +759,7 @@ function useItem(room, p, action) {
     const avg = Math.floor(total / alive.length);
     for (const x of alive) x.cash = avg;
     p.items.splice(idx, 1);
+    p.itemsUsed = (p.itemsUsed || 0) + 1;
     pushLog(room, `${p.name} 使用均富卡，所有人现金变为 ¥${avg}`, 'card');
     return ok();
   }
@@ -821,6 +882,7 @@ function resolveLanding(room, p, depth = 0) {
         }
         if (p.items.includes('shield') && p.isBot) {
           p.items = p.items.filter((x) => x !== 'shield');
+          p.itemsUsed = (p.itemsUsed || 0) + 1;
           pushLog(room, `${p.name} 用免租卡抵消了 ${owner.name} 的 ${tile.name} 租金 ¥${info.total}`, 'card');
         } else {
           pushLog(room, `${p.name} 踩到 ${owner.name} 的 ${tile.name}，应付租金 ¥${info.total}（${info.reason}）`, 'rent');
@@ -886,19 +948,52 @@ function triggerEvent(room) {
   checkEnd(room);
 }
 
-function missionMet(room, p) {
+function missionProgress(room, p) {
   const tiles = ownedTiles(room, p.id);
+  const groups = Object.keys(GROUPS).filter((g) => GROUPS[g].tiles.every((i) => room.owners[i] === p.id)).length;
+  const houses = tiles.reduce((s, i) => s + (room.houses[i] || 0), 0);
+  const rails = RAIL_TILES.filter((i) => room.owners[i] === p.id).length;
+  switch (p.mission) {
+    case 'monopoly': return { cur: groups, target: 1 };
+    case 'assets': return { cur: netWorth(room, p), target: 3200 };
+    case 'lands': return { cur: tiles.length, target: p.missionTarget || 0 };
+    case 'houses': return { cur: houses, target: p.missionTarget || 0 };
+    case 'rails': return { cur: rails, target: 2 };
+    case 'rent': return { cur: p.rentIncome || 0, target: p.missionTarget || 0 };
+    case 'twoSets': return { cur: groups, target: 2 };
+    case 'hotel': return { cur: tiles.filter((i) => (room.houses[i] || 0) >= 5).length, target: 1 };
+    case 'trade': return { cur: p.tradesDone || 0, target: 2 };
+    case 'item': return { cur: p.itemsUsed || 0, target: p.missionTarget || 0 };
+    default: return null;
+  }
+}
+
+function missionMet(room, p) {  const tiles = ownedTiles(room, p.id);
+  const target = p.missionTarget || 0;
+  const groups = Object.keys(GROUPS).filter((g) => GROUPS[g].tiles.every((i) => room.owners[i] === p.id)).length;
+  const houses = tiles.reduce((s, i) => s + (room.houses[i] || 0), 0);
+  const rails = RAIL_TILES.filter((i) => room.owners[i] === p.id).length;
   switch (p.mission) {
     case 'monopoly':
-      return Object.keys(GROUPS).some((g) => GROUPS[g].tiles.every((i) => room.owners[i] === p.id));
-    case 'cash':
-      return p.cash >= 2200;
+      return groups >= 1;
+    case 'assets':
+      return netWorth(room, p) >= 3200;
     case 'lands':
-      return tiles.length >= 8;
+      return tiles.length >= target;
     case 'houses':
-      return tiles.reduce((s, i) => s + (room.houses[i] || 0), 0) >= 3;
+      return houses >= target;
     case 'rails':
-      return RAIL_TILES.filter((i) => room.owners[i] === p.id).length >= 3;
+      return rails >= target;
+    case 'rent':
+      return (p.rentIncome || 0) >= target;
+    case 'twoSets':
+      return groups >= 2;
+    case 'hotel':
+      return tiles.some((i) => (room.houses[i] || 0) >= 5);
+    case 'trade':
+      return (p.tradesDone || 0) >= 2;
+    case 'item':
+      return (p.itemsUsed || 0) >= target;
     default:
       return false;
   }
@@ -907,14 +1002,21 @@ function missionMet(room, p) {
 function checkMissions(room) {
   if (!room.missionsEnabled) return;
   if (room.phase === 'lobby' || room.phase === 'ended') return;
+  const alive = room.players.filter((p) => !p.bankrupt);
+  const avg = alive.length ? alive.reduce((s, p) => s + netWorth(room, p), 0) / alive.length : 0;
   for (const p of room.players) {
     if (p.bankrupt || !p.mission || p.missionDone) continue;
     if (!missionMet(room, p)) continue;
     const m = MISSIONS.find((x) => x.id === p.mission);
     if (!m) continue;
+    const base = p.missionRewardBase || missionRewardBase(m, room.players.length);
+    const worth = Math.max(1, netWorth(room, p));
+    const factor = Math.min(2, Math.max(0.5, avg / worth));
+    const reward = Math.round((base * factor) / 10) * 10;
     p.missionDone = true;
-    p.cash += m.reward;
-    pushLog(room, `🎯 ${p.name} 完成秘密任务「${m.text}」，向所有人公开并立即获得 ¥${m.reward}`, 'system');
+    p.cash += reward;
+    const extra = Math.abs(factor - 1) >= 0.05 ? `（基础 ¥${base} × 财富系数 ${factor.toFixed(1)}）` : '';
+    pushLog(room, `🎯 ${p.name} 完成秘密任务「${p.missionText || missionText(m, room.players.length)}」，向所有人公开并立即获得 ¥${reward}${extra}`, 'system');
   }
 }
 
@@ -1411,6 +1513,7 @@ function actInner(room, playerId, action) {
     if (type === 'useShield') {
       if (!p.items.includes('shield')) return fail('没有免租卡');
       p.items = p.items.filter((x) => x !== 'shield');
+      p.itemsUsed = (p.itemsUsed || 0) + 1;
       room.rentChoice = null;
       pushLog(room, `${p.name} 用免租卡抵消了 ${owner ? owner.name : '对方'} 的租金 ¥${rc.amount}`, 'card');
       room.phase = room.again && !p.inJail ? 'roll' : 'end';
@@ -1690,6 +1793,10 @@ export function view(room, youId) {
       itemCount: (p.items || []).length,
       mission: (p.id === youId || room.phase === 'ended') ? p.mission : null,
       missionDone: !!p.missionDone,
+      missionText: (p.id === youId || room.phase === 'ended') ? (p.missionText || null) : null,
+      missionTarget: p.id === youId ? (p.missionTarget || 0) : 0,
+      missionRewardBase: (p.id === youId || room.phase === 'ended') ? (p.missionRewardBase || 0) : 0,
+      missionProgress: p.id === youId ? missionProgress(room, p) : null,
       skipTurns: p.skipTurns || 0,
     })),
     owners: room.owners,

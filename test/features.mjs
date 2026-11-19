@@ -1,6 +1,7 @@
 // 新玩法单测：回合设置、秘密任务、道具、全场事件、电脑性格
 import {
   createRoom, addPlayer, startGame, act, view, PERSONA_IDS, MISSIONS, tickStall, tickBots, rentInfo,
+  missionTarget, missionRewardBase, missionText,
 } from '../public/game/engine.js';
 import { BOARD, GROUPS } from '../public/game/board.js';
 
@@ -51,6 +52,96 @@ console.log('\n回合数设置');
   expect(!act(room, host.id, { type: 'setRounds', rounds: 99 }).ok, '只能选 20/35/50');
 }
 
+console.log('\n任务按人数过滤、目标与奖励随人数变化');
+{
+  const { room, players } = makeGame(6);
+  expect(players.every((p) => p.mission !== 'rails'), '6 人局没有车站任务');
+  for (const p of players) {
+    const def = MISSIONS.find((m) => m.id === p.mission);
+    expect(!!def, '任务在任务池里');
+    expect(p.missionTarget === missionTarget(def, 6), `${p.mission} 目标按 6 人计算`);
+    expect(p.missionRewardBase === missionRewardBase(def, 6), `${p.mission} 奖励按 6 人计算`);
+    expect(p.missionText === missionText(def, 6), '任务文案与目标一致');
+  }
+  const r2 = makeGame(2);
+  expect(r2.players.every((p) => p.mission !== 'hotel' || p.missionRewardBase === 600), '2 人局旅馆奖励 600');
+  const railOk = r2.players.some((p) => p.mission === 'rails');
+  if (railOk) expect(r2.players.find((p) => p.mission === 'rails').missionRewardBase === 700, '2 人局车站奖励 700');
+}
+
+console.log('\n新任务：收租 / 交易 / 道具');
+{
+  const { room, players } = makeGame(3);
+  room.round = 5;
+  room.lastEventRound = 5;
+  players.forEach((p, i) => { p.cash = 2000; p.mission = 'lands'; p.missionTarget = 99; p.missionDone = false; });
+  const p = players[0];
+  p.mission = 'rent';
+  p.missionTarget = 600;
+  p.missionText = '累计收取租金 ¥600';
+  p.missionRewardBase = 600;
+  p.rentIncome = 600;
+  room.turn = 0;
+  room.phase = 'end';
+  expect(act(room, p.id, { type: 'end' }).ok, '结束回合正常');
+  expect(p.missionDone === true, '收租任务可以完成');
+  expect(p.cash > 2000, '收租任务发了奖励');
+
+  const g2 = makeGame(3);
+  g2.room.round = 5;
+  g2.room.lastEventRound = 5;
+  g2.players.forEach((x) => { x.cash = 2000; x.mission = 'lands'; x.missionTarget = 99; });
+  const t = g2.players[1];
+  t.mission = 'trade';
+  t.missionText = '完成 2 次玩家交易';
+  t.missionRewardBase = 600;
+  t.tradesDone = 2;
+  g2.room.turn = 1;
+  g2.room.phase = 'end';
+  expect(act(g2.room, t.id, { type: 'end' }).ok, '结束回合正常');
+  expect(t.missionDone === true, '交易任务可以完成');
+
+  const g3 = makeGame(3);
+  g3.room.round = 5;
+  g3.room.lastEventRound = 5;
+  g3.players.forEach((x) => { x.cash = 2000; x.mission = 'lands'; x.missionTarget = 99; });
+  const it = g3.players[2];
+  it.mission = 'item';
+  it.missionTarget = 3;
+  it.missionText = '使用 3 张道具卡';
+  it.missionRewardBase = 700;
+  it.itemsUsed = 3;
+  g3.room.turn = 2;
+  g3.room.phase = 'end';
+  expect(act(g3.room, it.id, { type: 'end' }).ok, '结束回合正常');
+  expect(it.missionDone === true, '道具任务可以完成');
+}
+
+console.log('\n财富系数：落后的人奖励更高');
+{
+  const { room, players } = makeGame(3);
+  room.round = 5;
+  room.lastEventRound = 5;
+  players[0].cash = 1000;
+  players[1].cash = 5000;
+  players[2].cash = 5000;
+  players[0].mission = 'assets';
+  players[0].missionTarget = 3200;
+  players[0].missionText = '总资产达到 ¥3200';
+  players[0].missionRewardBase = 600;
+  room.owners = {};
+  room.phase = 'end';
+  room.turn = 0;
+  players[0].cash = 3200; // 达成
+  players[1].cash = 6000;
+  players[2].cash = 6000;
+  // 平均 (3200+6000+6000)/3=5066，3200 的系数约 1.58 → 约 950
+  expect(act(room, players[0].id, { type: 'end' }).ok, '结束回合正常');
+  expect(players[0].missionDone === true, '总资产任务完成');
+  expect(players[0].cash > 3200 + 600, `落后时奖励应高于基础 600（实际 ${players[0].cash - 3200}）`);
+  expect(room.log.some((l) => l.text.includes('财富系数')), '日志里显示财富系数');
+}
+
 console.log('\n秘密任务分配与可见性');
 {
   const { room, players } = makeGame(3);
@@ -66,25 +157,28 @@ console.log('\n任务达成立即发奖励并公开');
   const { room, players } = makeGame(3);
   room.round = 5;
   room.lastEventRound = 5; // 跳过全场事件，避免现金被扣
-  players.forEach((p) => { p.mission = 'lands'; });
-  players[0].mission = 'cash';
-  players[0].cash = 3200;
+  players.forEach((p) => { p.mission = 'lands'; p.missionTarget = 99; });
+  players[0].mission = 'assets';
+  players[0].missionTarget = 3200;
+  players[0].missionText = '总资产达到 ¥3200';
+  players[0].missionRewardBase = 600;
+  players.forEach((p) => { p.cash = 4000; });
   room.turn = 0;
   room.phase = 'end';
   const r = act(room, players[0].id, { type: 'end' });
   expect(r.ok, '结束回合正常');
   expect(room.phase !== 'ended', '任务达成不会提前结束对局');
   expect(players[0].missionDone === true, '任务标记为已完成');
-  expect(players[0].cash === 3700, `立即获得奖励 ¥500（实际 ${players[0].cash}）`);
+  expect(players[0].cash === 4600, `立即获得奖励 ¥600（实际 ${players[0].cash}）`);
   const v = view(room, players[1].id);
   expect(v.players.find((p) => p.id === players[0].id).missionDone === true, '其他人能看到任务已完成');
-  expect(room.log.some((l) => l.text.includes('现金达到 ¥2200')), '任务内容向所有人公开');
+  expect(room.log.some((l) => l.text.includes('总资产达到 ¥3200')), '任务内容向所有人公开');
 }
 
 console.log('\n结算不再叠加任务加成');
 {
   const { room, players } = makeGame(3);
-  players[0].mission = 'cash';
+  players[0].mission = 'assets';
   players[0].missionDone = true;
   players[0].cash = 3000;
   players[1].cash = 1000;
@@ -109,6 +203,7 @@ console.log('\n任务未达成不会误判');
   const { room, players } = makeGame(2);
   room.round = 8;
   players[0].mission = 'lands';
+  players[0].missionTarget = 8;
   room.phase = 'end';
   room.turn = 0;
   act(room, players[0].id, { type: 'end' });

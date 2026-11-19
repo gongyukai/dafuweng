@@ -1,5 +1,5 @@
 import { BOARD, GROUPS, sideOf, gridPos } from '../game/board.js';
-import { PIECES, pieceOf, PERSONAS, MISSIONS, ITEMS, EVENTS, rentInfo } from '../game/engine.js';
+import { PIECES, pieceOf, PERSONAS, ITEMS, EVENTS, rentInfo } from '../game/engine.js';
 import {
   HttpNet, HostNet, GuestNet, LocalNet, loadSession, saveSession, detectServer,
 } from './net.js';
@@ -7,8 +7,7 @@ import {
 const $ = (sel) => document.querySelector(sel);
 const fmt = (n) => Number(n || 0).toLocaleString('zh-CN');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const icon = (file) => `assets/twemoji/${file}`;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));const icon = (file) => `assets/twemoji/${file}`;
 
 // 第三方访问统计（Cloudflare Web Analytics）
 // 到 Cloudflare 后台拿到 token 后填进下面这行即可启用；留空则完全不加载、不上报
@@ -53,8 +52,6 @@ const S = {
 const PIPS = {  1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8],
 };
 
-const MISSION_TEXT = Object.fromEntries(MISSIONS.map((m) => [m.id, m.text]));
-const MISSION_REWARD = Object.fromEntries(MISSIONS.map((m) => [m.id, m.reward || 0]));
 const EVENT_TEXT = Object.fromEntries(EVENTS.map((e) => [e.id, e]));
 const ITEM_ICON = {
   dice: 'assets/ui/dice-d6.svg',
@@ -694,28 +691,22 @@ function actionLobby(v, isHost, me) {
 }
 
 function missionProgress(v, me) {
-  const mine = Object.keys(v.owners).filter((i) => v.owners[i] === me.id).map(Number);
-  switch (me.mission) {
-    case 'lands': return `${mine.length}/8`;
-    case 'houses': return `${mine.reduce((s, i) => s + (v.houses[i] || 0), 0)}/3`;
-    case 'rails': return `${mine.filter((i) => BOARD[i].type === 'rail').length}/3`;
-    case 'cash': return `¥${fmt(me.cash)}/2200`;
-    case 'monopoly': {
-      const done = Object.keys(GROUPS).filter((g) => GROUPS[g].tiles.every((i) => v.owners[i] === me.id)).length;
-      return `${done}/1 组`;
-    }
-    default: return '';
-  }
+  const p = me.missionProgress;
+  if (!p || !p.target) return '';
+  const money = me.mission === 'assets' || me.mission === 'rent';
+  const fmtNum = (n) => (money ? `¥${fmt(n)}` : fmt(n));
+  return `${fmtNum(p.cur)}/${fmtNum(p.target)}`;
 }
 
 function missionCardHTML(v, me) {
   if (!me || !me.mission) return '';
-  const text = MISSION_TEXT[me.mission] || me.mission;
-  const reward = MISSION_REWARD[me.mission] || 0;
+  const text = me.missionText || me.mission;
+  const reward = me.missionRewardBase || 0;
+  const prog = me.missionDone ? '' : missionProgress(v, me);
   return `<div class="mission-card${me.missionDone ? ' done' : ''}">
     <span class="mc-ico">${mi('assets/ui/bullseye.svg')}</span>
-    <div class="mc-body"><b>秘密任务</b><span>${esc(text)}</span></div>
-    <em>${me.missionDone ? `已完成 · +¥${fmt(reward)}` : `奖励 ¥${fmt(reward)}`}</em>
+    <div class="mc-body"><b>秘密任务</b><span>${esc(text)}</span>${prog ? `<small class="mc-prog">${prog}</small>` : ''}</div>
+    <em>${me.missionDone ? '已完成' : `奖励 ¥${fmt(reward)}`}<small>财富系数 0.5–2×</small></em>
   </div>`;
 }
 
@@ -746,7 +737,7 @@ function actionEnded(v, isHost) {
     <p class="win">${winnerWorth ? `净资产 ¥${fmt(winnerWorth.worth)}` : ''}</p>
     <table>${rank.map((r) => {
       const p = v.players.find((x) => x.id === r.id);
-      const m = p && p.mission ? MISSION_TEXT[p.mission] : '';
+      const m = p && p.mission ? (p.missionText || '') : '';
       const bonus = r.missionDone ? ' · 已完成' : '';
       return `<tr><td>${esc(r.name)}${m ? `<br><small class="mission-line">任务：${esc(m)}${bonus}</small>` : ''}</td><td>¥${fmt(r.worth)}</td></tr>`;
     }).join('')}</table>

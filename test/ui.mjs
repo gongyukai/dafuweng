@@ -102,7 +102,7 @@ if (hasStart) {
   await ev("(() => { for (const ch of 'laoban') document.dispatchEvent(new KeyboardEvent('keydown', { key: ch })); })()");
   await until("!!document.querySelector('.host-chips')", '隐藏房主面板');
   const targetId = await ev("window.__dmj.view.players.find((p) => p.id !== window.__dmj.me).id");
-  await ev(`(() => { const S = window.__dmj; const room = S.net.host.room; const t = room.players.find((p) => p.id === ${JSON.stringify(targetId)}); t.mission = 'lands'; S.net.host.publish(); })()`);
+  await ev(`(() => { const S = window.__dmj; const room = S.net.host.room; const t = room.players.find((p) => p.id === ${JSON.stringify(targetId)}); t.mission = 'lands'; t.missionTarget = 99; t.missionText = '拥有 99 块地产'; t.missionRewardBase = 600; S.net.host.publish(); })()`);
   await sleep(300);
   await ev(`document.querySelector('.host-chip[data-id="${targetId}"]').click()`);
   await sleep(300);

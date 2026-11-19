@@ -112,12 +112,22 @@ let sC = await sc.waitFor((s) => s.dice[0] > 0);
 expect(JSON.stringify(sA.dice) === JSON.stringify(sB.dice) && JSON.stringify(sA.dice) === JSON.stringify(sC.dice),
   '三个客户端看到的骰子一致');
 
-// 处理可能的购买提示
-if (sA.phase === 'buy') {
-  const pass = await post('/api/act', { token: curToken, action: { type: 'pass' } });
-  expect(pass.status === 200, `${curName} 放弃购买`);
-  sA = await sa.waitFor((s) => s.phase !== 'buy');
+// 处理可能的购买提示 / 双数再掷，直到进入结束回合阶段
+let lastSeq = sA.seq;
+let st = sA;
+for (let i = 0; i < 6 && st.phase !== 'end'; i++) {
+  if (st.phase === 'buy') {
+    const pass = await post('/api/act', { token: curToken, action: { type: 'pass' } });
+    expect(pass.status === 200, `${curName} 放弃购买`);
+  } else if (st.phase === 'roll') {
+    const again = await post('/api/act', { token: curToken, action: { type: 'roll' } });
+    expect(again.status === 200, `${curName} 双数再掷`);
+  } else break;
+  st = await sa.waitFor((x) => x.seq > lastSeq);
+  lastSeq = st.seq;
 }
+expect(st.phase === 'end', '轮到结束回合阶段，实际 ' + st.phase);
+sA = st;
 const ended = await post('/api/act', { token: curToken, action: { type: 'end' } });
 expect(ended.status === 200, `${curName} 结束回合`);
 sB = await sb.waitFor((s) => s.turnId !== stA.turnId);

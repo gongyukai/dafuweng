@@ -1,4 +1,4 @@
-﻿// 端到端测试：起服务后验证 建房 → 加入 → 开局 → 掷骰 → SSE 推送
+// 端到端测试：起服务后验证 建房 → 加入 → 开局 → 掷骰 → SSE 推送
 const BASE = process.env.BASE || 'http://127.0.0.1:3210';
 
 async function post(path, body) {
@@ -94,11 +94,13 @@ const started = await post('/api/act', { token: tokenA, action: { type: 'start' 
 assert(started.status === 200, '开局失败：' + JSON.stringify(started.data));
 s = await nextA();
 assert(s.phase === 'roll', '开局后应进入掷骰阶段，实际 ' + s.phase);
-assert(s.turnId === a.data.playerId, '房主应先行');
-console.log('✅ 开局成功，轮到房主');
+assert(s.turnId === a.data.playerId || s.turnId === b.data.playerId, '先手应是两名玩家之一（随机先手）');
+const firstToken = s.turnId === a.data.playerId ? tokenA : tokenB;
+const otherToken = firstToken === tokenA ? tokenB : tokenA;
+console.log('✅ 开局成功，轮到 ' + (firstToken === tokenA ? '房主' : '访客') + '（先手随机）');
 
 // 6. 掷骰
-const rolled = await post('/api/act', { token: tokenA, action: { type: 'roll' } });
+const rolled = await post('/api/act', { token: firstToken, action: { type: 'roll' } });
 assert(rolled.status === 200, '掷骰失败');
 s = await nextA();
 assert(s.dice[0] >= 1 && s.dice[1] <= 6, '骰子点数异常：' + JSON.stringify(s.dice));
@@ -111,7 +113,7 @@ assert(rejoin.status === 200 && rejoin.data.playerId === a.data.playerId, '重�
 console.log('✅ 断线重连正常');
 
 // 8. 错误动作
-const wrong = await post('/api/act', { token: tokenB, action: { type: 'roll' } });
+const wrong = await post('/api/act', { token: otherToken, action: { type: 'roll' } });
 assert(wrong.status === 400, '不该轮到 B 掷骰');
 console.log('✅ 回合校验生效');
 
