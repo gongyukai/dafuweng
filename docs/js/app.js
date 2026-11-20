@@ -677,7 +677,7 @@ function actionLobby(v, isHost, me) {
   const rounds = [20, 35, 50].map((n) => `<button class="round-opt${v.roundLimit === n ? ' on' : ''}" data-act="setRounds" data-rounds="${n}" ${isHost ? '' : 'disabled'}>${n}</button>`).join('');
   const on = !!v.missionsEnabled;
   const missionBtns = `<button class="round-opt${on ? '' : ' on'}" data-act="setMissions" data-enabled="0" ${isHost ? '' : 'disabled'}>关（经典）</button>
-    <button class="round-opt${on ? ' on' : ''}" data-act="setMissions" data-enabled="1" ${isHost ? '' : 'disabled'}>开（现金奖励）</button>`;
+    <button class="round-opt${on ? ' on' : ''}" data-act="setMissions" data-enabled="1" ${isHost ? '' : 'disabled'}>开（任务奖励）</button>`;
   return `<div class="act-head"><h3>准备中</h3><span>${v.players.length}/6 人</span></div>
     <p class="act-msg">房间码 <b>${v.code}</b>，先选一个自己的棋子。人齐后房主开局。</p>
     ${pieceGrid(v, me)}

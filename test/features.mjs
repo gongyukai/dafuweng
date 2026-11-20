@@ -18,6 +18,7 @@ function makeGame(n = 2) {
   const players = [];
   for (let i = 0; i < n; i++) players.push(addPlayer(room, `P${i + 1}`).player);
   startGame(room);
+  room.turn = 0; // 测试默认从第一位玩家开始（正式游戏先手随机）
   return { room, players };
 }
 

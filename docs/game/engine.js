@@ -1323,6 +1323,7 @@ export function tickStall(room, now = Date.now()) {
       room.debt = null;
       bankrupt(room, payer, creditor);
     }
+    checkMissions(room);
     room.seq++;
     return true;
   }
