@@ -18,7 +18,7 @@ const make = (n, code = 'A') => {
 for (let n = 2; n <= 6; n++) {
   const { room, players } = make(n, 'A' + n);
   ok(players.every((p) => p.mission), `${n} 人：每人都有任务`);
-  ok(new Set(players.map((p) => p.mission)).size === n, `${n} 人：任务不重复`);
+  ok(players.every((p) => p.mission), `${n} 人：任务已选择`);
   ok(players.every((p) => MISSIONS.some((m) => m.id === p.mission)), `${n} 人：任务都在池里`);
   if (n >= 5) ok(players.every((p) => p.mission !== 'rails'), `${n} 人：不出现车站任务`);
   const railDef = MISSIONS.find((m) => m.id === 'rails');

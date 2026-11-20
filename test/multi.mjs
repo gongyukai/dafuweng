@@ -106,7 +106,18 @@ expect(wrongTurn.status === 400, '不是自己的回合不能掷骰');
 
 const rolled = await post('/api/act', { token: curToken, action: { type: 'roll' } });
 expect(rolled.status === 200, `${curName} 掷骰成功`);
-let sA = await sa.waitFor((s) => s.dice[0] > 0);
+let sDice = await sa.waitFor((s) => s.phase === 'dice' || s.dice[0] > 0);
+if (sDice.phase === 'dice') {
+  const pick = await post('/api/act', { token: curToken, action: { type: 'pickDice', i: 0 } });
+  expect(pick.status === 200, `${curName} 选择骰子`);
+  sDice = await sa.waitFor((s) => s.phase !== 'dice');
+}
+if (sDice.phase === 'adjust') {
+  const done = await post('/api/act', { token: curToken, action: { type: 'adjustRoll', delta: 0 } });
+  expect(done.status === 200, `${curName} 确认点数`);
+  sDice = await sa.waitFor((s) => s.phase !== 'adjust');
+}
+let sA = sDice.dice[0] > 0 ? sDice : await sa.waitFor((s) => s.dice[0] > 0);
 let sB = await sb.waitFor((s) => s.dice[0] > 0);
 let sC = await sc.waitFor((s) => s.dice[0] > 0);
 expect(JSON.stringify(sA.dice) === JSON.stringify(sB.dice) && JSON.stringify(sA.dice) === JSON.stringify(sC.dice),
@@ -122,9 +133,24 @@ for (let i = 0; i < 6 && st.phase !== 'end'; i++) {
   } else if (st.phase === 'roll') {
     const again = await post('/api/act', { token: curToken, action: { type: 'roll' } });
     expect(again.status === 200, `${curName} 双数再掷`);
+  } else if (st.phase === 'card') {
+    const choose = await post('/api/act', { token: curToken, action: { type: 'chooseCard', i: 0 } });
+    expect(choose.status === 200, `${curName} 选择卡牌`);
   } else break;
   st = await sa.waitFor((x) => x.seq > lastSeq);
   lastSeq = st.seq;
+  if (st.phase === 'dice') {
+    const pick = await post('/api/act', { token: curToken, action: { type: 'pickDice', i: 0 } });
+    expect(pick.status === 200, `${curName} 选择骰子`);
+    st = await sa.waitFor((x) => x.seq > lastSeq);
+    lastSeq = st.seq;
+  }
+  if (st.phase === 'adjust') {
+    const done = await post('/api/act', { token: curToken, action: { type: 'adjustRoll', delta: 0 } });
+    expect(done.status === 200, `${curName} 确认点数`);
+    st = await sa.waitFor((x) => x.seq > lastSeq);
+    lastSeq = st.seq;
+  }
 }
 expect(st.phase === 'end', '轮到结束回合阶段，实际 ' + st.phase);
 sA = st;

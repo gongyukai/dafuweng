@@ -880,6 +880,24 @@ button, input { font: inherit; color: inherit; }
 .mission-card.done .mc-ico { color: #7ef0a8; }
 .mission-card.done em { color: #7ef0a8; }
 
+.mission-picks { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.mission-opt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(233, 196, 134, 0.4);
+  background: rgba(233, 196, 134, 0.08);
+  color: var(--text);
+  cursor: pointer;
+}
+.mission-opt:hover { background: rgba(233, 196, 134, 0.16); }
+.mission-opt b { font-size: 13px; }
+.mission-opt span { font-size: 11px; color: var(--gold); }
+
 .items-bar { margin-bottom: 8px; }
 .items-head { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-bottom: 5px; }
 .items-head em { font-style: normal; color: #7d968a; }

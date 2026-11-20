@@ -103,8 +103,18 @@ console.log('✅ 开局成功，轮到 ' + (firstToken === tokenA ? '房主' : '
 const rolled = await post('/api/act', { token: firstToken, action: { type: 'roll' } });
 assert(rolled.status === 200, '掷骰失败');
 s = await nextA();
+if (s.phase === 'dice') {
+  const pick = await post('/api/act', { token: firstToken, action: { type: 'pickDice', i: 0 } });
+  assert(pick.status === 200, '选择骰子失败');
+  s = await nextA();
+}
+if (s.phase === 'adjust') {
+  const done = await post('/api/act', { token: firstToken, action: { type: 'adjustRoll', delta: 0 } });
+  assert(done.status === 200, '确认点数失败');
+  s = await nextA();
+}
 assert(s.dice[0] >= 1 && s.dice[1] <= 6, '骰子点数异常：' + JSON.stringify(s.dice));
-assert(['roll', 'buy', 'end', 'ended'].includes(s.phase), '掷骰后阶段异常：' + s.phase);
+assert(['roll', 'buy', 'end', 'ended'].includes(s.phase), '掷骰后阶段异常，实际 ' + s.phase);
 console.log(`✅ 掷骰成功：${s.dice[0]} + ${s.dice[1]}，阶段 ${s.phase}`);
 
 // 7. 断线重连（用旧 token 再 join）

@@ -153,6 +153,8 @@ export function createRoom(code) {
     trade: null,
     debt: null,
     rentChoice: null,
+    cardChoice: null,
+    diceMode: 'three',
     altUses: 10,
     event: null,
     missionWin: null,
@@ -201,10 +203,18 @@ export function resetRoom(room) {
   room.pendingBuy = null;
   room.lastCard = null;
   room.trade = null;
+  room.debt = null;
+  room.rentChoice = null;
+  room.cardChoice = null;
+  room.diceOptions = null;
+  room.dicePick = null;
+  room.moveTotal = null;
+  room.rollDouble = false;
   room.event = null;
   room.missionWin = null;
   room.winnerId = null;
   room.finalRank = null;
+  room.cardChoice = null;
   room.log = [];
   room.chat = [];
   room.logSeq = 0;
@@ -222,13 +232,17 @@ export function resetRoom(room) {
     p.shield = false;
     p.mission = null;
     p.missionDone = false;
+    p.missionOptions = [];
+    p.missionPicked = false;
     p.missionTarget = 0;
     p.missionText = null;
     p.missionRewardBase = 0;
+    p.itemChoices = [];
     p.rentIncome = 0;
     p.tradesDone = 0;
     p.tradesThisTurn = 0;
     p.itemsUsed = 0;
+    p.planPoints = 0;
     p.forcedDice = 0;
     p.skipTurns = 0;
     p.jailCount = 0;
@@ -277,13 +291,17 @@ export function addPlayer(room, name, opts = {}) {
     shield: false,
     mission: null,
     missionDone: false,
+    missionOptions: [],
+    missionPicked: false,
     missionTarget: 0,
     missionText: null,
     missionRewardBase: 0,
+    itemChoices: [],
     rentIncome: 0,
     tradesDone: 0,
     tradesThisTurn: 0,
     itemsUsed: 0,
+    planPoints: 0,
     skipTurns: 0,
     jailCount: 0,
     persona: opts.persona || (opts.isBot ? PERSONA_IDS[Math.floor(Math.random() * PERSONA_IDS.length)] : null),
@@ -455,6 +473,10 @@ export function startGame(room) {
   room.lastEventRound = 0;
   room.turnStartedAt = Date.now();
   room.dice = [0, 0];
+  room.diceOptions = null;
+  room.dicePick = null;
+  room.moveTotal = null;
+  room.rollDouble = false;
   room.again = false;
   room.doubles = 0;
   room.winnerId = null;
@@ -463,14 +485,22 @@ export function startGame(room) {
   room.missionWin = null;
   const n = room.players.length;
   const pool = MISSIONS.filter((m) => n >= (m.min || 2) && n <= (m.max || 6));
-  const missionDeck = shuffle(pool, room.rng);
-  room.players.forEach((p, i) => {
-    if (!room.missionsEnabled) { p.mission = null; return; }
-    const def = missionDeck[i % missionDeck.length];
-    p.mission = def.id;
-    p.missionTarget = missionTarget(def, n);
-    p.missionText = missionText(def, n);
-    p.missionRewardBase = missionRewardBase(def, n);
+  room.players.forEach((p) => {
+    p.mission = null;
+    p.missionOptions = [];
+    p.missionPicked = false;
+    p.missionTarget = 0;
+    p.missionText = null;
+    p.missionRewardBase = 0;
+    p.itemChoices = [];
+    if (!room.missionsEnabled) return;
+    const options = shuffle(pool, room.rng).slice(0, Math.min(2, pool.length));
+    p.missionOptions = options.map((d) => d.id);
+    if (p.isBot) {
+      assignMission(room, p, options[Math.floor(room.rng() * options.length)]);
+      p.missionOptions = [];
+      p.missionPicked = true;
+    }
   });
   for (const p of room.players) {
     p.cash = START_CASH;
@@ -489,14 +519,65 @@ export function startGame(room) {
     p.tradesDone = 0;
     p.tradesThisTurn = 0;
     p.itemsUsed = 0;
+    p.planPoints = 0;
   }
   room.owners = {};
   room.houses = {};
   room.mortgaged = {};
   room.seq++;
   pushLog(room, `游戏开始，共 ${room.players.length} 位玩家，初始资金 ¥${START_CASH}`, 'system');
-  pushLog(room, `轮到 ${currentPlayer(room).name} 掷骰子`, 'turn');
+  const waiting = room.missionsEnabled && room.players.some((p) => !p.missionPicked);
+  if (waiting) {
+    room.phase = 'mission';
+    room.turnStartedAt = Date.now();
+    pushLog(room, '请选择你的秘密任务（每人二选一）', 'system');
+  } else {
+    room.phase = 'roll';
+    room.turnStartedAt = Date.now();
+    pushLog(room, `轮到 ${currentPlayer(room).name} 掷骰子`, 'turn');
+  }
   return { ok: true };
+}
+
+function assignMission(room, p, def) {
+  if (!def) return;
+  p.mission = def.id;
+  p.missionTarget = missionTarget(def, room.players.length);
+  p.missionText = missionText(def, room.players.length);
+  p.missionRewardBase = missionRewardBase(def, room.players.length);
+}
+
+function pickMission(room, p, action) {
+  if (!p.missionOptions || !p.missionOptions.length) return fail('现在不需要选择任务');
+  const idx = Number(action.i);
+  if (idx !== 0 && idx !== 1) return fail('请选择一个任务');
+  const def = MISSIONS.find((m) => m.id === p.missionOptions[idx]);
+  if (!def) return fail('任务不存在');
+  assignMission(room, p, def);
+  p.missionOptions = [];
+  p.missionPicked = true;
+  pushLog(room, `${p.name} 已经选好了秘密任务`, 'system');
+  if (room.players.every((x) => x.missionPicked)) beginFirstTurn(room);
+  room.seq++;
+  return ok();
+}
+
+function beginFirstTurn(room) {
+  room.phase = 'roll';
+  room.turnStartedAt = Date.now();
+  pushLog(room, `轮到 ${currentPlayer(room).name} 掷骰子`, 'turn');
+}
+
+function autoPickMissions(room) {
+  for (const p of room.players) {
+    if (p.missionPicked || !p.missionOptions || !p.missionOptions.length) continue;
+    const def = MISSIONS.find((m) => m.id === p.missionOptions[0]);
+    assignMission(room, p, def);
+    p.missionOptions = [];
+    p.missionPicked = true;
+    pushLog(room, `${p.name} 超时未选，自动分配了秘密任务`, 'system');
+  }
+  beginFirstTurn(room);
 }
 
 // ---------------- 金钱 ----------------
@@ -531,7 +612,7 @@ export function rentInfo(room, tileIdx) {
     reason = `${n} 个车站`;
   } else if (tile.type === 'util') {
     const n = UTIL_TILES.filter((i) => room.owners[i] === ownerId).length;
-    const total = (room.dice[0] || 0) + (room.dice[1] || 0);
+    const total = room.moveTotal || ((room.dice[0] || 0) + (room.dice[1] || 0));
     base = total * (n === 2 ? 10 : 4);
     reason = `${n} 家公用事业 × 骰子 ${total}`;
   }
@@ -695,10 +776,10 @@ function settleDebt(room) {
     room.phase = 'end';
     payer.inJail = false;
     payer.jailTurns = 0;
-    const total = (room.dice[0] || 0) + (room.dice[1] || 0);
+    const total = room.moveTotal || ((room.dice[0] || 0) + (room.dice[1] || 0));
     moveBy(room, payer, total);
     resolveLanding(room, payer);
-    if (room.phase === 'rent' || room.phase === 'debt' || room.phase === 'ended') return;
+    if (room.phase === 'rent' || room.phase === 'debt' || room.phase === 'ended' || room.phase === 'card') return;
     room.phase = room.pendingBuy != null ? 'buy' : room.again && !payer.inJail ? 'roll' : 'end';
     return;
   }
@@ -726,7 +807,9 @@ function moveBy(room, p, steps) {
   if (raw >= 40) {
     p.cash += GO_SALARY;
     pushLog(room, `${p.name} 经过起点，领取 ¥${GO_SALARY}`, 'money');
-    grantItem(room, p);
+    p.planPoints = Math.min(3, (p.planPoints || 0) + 1);
+    pushLog(room, `${p.name} 获得 1 枚规划点（共 ${p.planPoints} 枚）`, 'info');
+    offerGoItems(room, p);
   }
   p.pos = ((raw % 40) + 40) % 40;
 }
@@ -767,6 +850,19 @@ function grantItem(room, p, id) {  if (p.items.length >= MAX_ITEMS) {
   p.items.push(item);
   pushLog(room, `${p.name} 获得道具「${ITEMS[item].name}」`, 'card');
   return item;
+}
+
+function offerGoItems(room, p) {
+  if (p.items.length >= MAX_ITEMS) {
+    pushLog(room, `${p.name} 手牌已满（${MAX_ITEMS} 张），过起点道具作废`, 'card');
+    return;
+  }
+  const first = ITEM_IDS[Math.floor(room.rng() * ITEM_IDS.length)];
+  let second = ITEM_IDS[Math.floor(room.rng() * ITEM_IDS.length)];
+  let guard = 0;
+  while (second === first && guard++ < 10) second = ITEM_IDS[Math.floor(room.rng() * ITEM_IDS.length)];
+  p.itemChoices = [first, second];
+  pushLog(room, `${p.name} 经过起点，下回合可以挑选一件道具`, 'card');
 }
 
 function useItem(room, p, action) {
@@ -907,6 +1003,50 @@ function applyCard(room, p, drawn, depth) {
   }
 }
 
+function resumeAfterCard(room, p) {
+  if (room.phase === 'ended' || room.phase === 'debt' || room.phase === 'rent' || room.phase === 'card') return;
+  if (p.bankrupt) { nextTurn(room); return; }
+  room.phase = room.pendingBuy != null ? 'buy' : room.again && !p.inJail ? 'roll' : 'end';
+}
+
+function chooseCard(room, p, idx) {
+  const cc = room.cardChoice;
+  if (!cc || cc.playerId !== p.id) return fail('现在不需要选卡');
+  if (!Number.isInteger(idx) || idx < 0 || idx >= cc.options.length) return fail('卡牌不存在');
+  const chosen = cc.options[idx];
+  const depth = cc.depth || 0;
+  room.cardChoice = null;
+  room.phase = 'end';
+  applyCard(room, p, chosen, depth);
+  resumeAfterCard(room, p);
+  room.seq++;
+  return ok();
+}
+
+function cardScore(card) {
+  switch (card.t) {
+    case 'money': return card.amount;
+    case 'collectEach': return (card.amount || 0) * 4;
+    case 'payEach': return -(card.amount || 0) * 4;
+    case 'jailcard': return 250;
+    case 'jail': return -1000;
+    case 'repair': return -300;
+    case 'item': return 120;
+    case 'move': return card.to === 0 ? 200 : 40;
+    case 'nearestRail': return 30;
+    case 'back': return -20;
+    default: return 0;
+  }
+}
+
+function botPickCard(options) {
+  let best = 0;
+  for (let i = 1; i < options.length; i++) {
+    if (cardScore(options[i].card) > cardScore(options[best].card)) best = i;
+  }
+  return best;
+}
+
 function resolveLanding(room, p, depth = 0) {
   if (!p || p.bankrupt || depth > 4) return;
   const tile = BOARD[p.pos];
@@ -948,9 +1088,14 @@ function resolveLanding(room, p, depth = 0) {
       if (charge(room, p, tile.amount, null) === 'debt') return;
       break;
     case 'chance':
-    case 'chest':
-      applyCard(room, p, drawCard(room, tile.type), depth);
-      break;
+    case 'chest': {
+      const options = [drawCard(room, tile.type), drawCard(room, tile.type)];
+      room.cardChoice = { playerId: p.id, deck: tile.type, options, depth };
+      room.cardStartedAt = Date.now();
+      room.phase = 'card';
+      pushLog(room, `${p.name} 抽到两张${DECK_NAME[tile.type]}，请选择一张`, 'card');
+      return;
+    }
     case 'gotojail':
       goToJail(room, p);
       break;
@@ -1111,7 +1256,14 @@ function nextTurn(room) {
         : (start > prev || start <= i);
       if (crossedStart) room.round += 1;
       room.turn = i;
-      room.phase = 'roll';
+      if ((p.itemChoices || []).length && p.items.length < MAX_ITEMS) {
+        room.phase = 'item';
+        room.turnStartedAt = Date.now();
+        pushLog(room, `${p.name} 请选择一件道具`, 'card');
+      } else {
+        if (p.items.length >= MAX_ITEMS) p.itemChoices = [];
+        room.phase = 'roll';
+      }
       p.tradesThisTurn = 0;
       room.turnStartedAt = Date.now();
       room.dice = [0, 0];
@@ -1164,25 +1316,7 @@ function settleByNetWorth(room) {
 
 // ---------------- 动作 ----------------
 
-function doRoll(room) {
-  const p = currentPlayer(room);
-  let d1;
-  let d2;
-  if (p.forcedDice) {
-    const v = Math.max(2, Math.min(12, Math.floor(p.forcedDice)));
-    d1 = Math.min(6, v - 1);
-    d2 = v - d1;
-    p.forcedDice = 0;
-    pushLog(room, `${p.name} 用遥控骰子指定 ${v} 点`, 'card');
-  } else {
-    d1 = 1 + Math.floor(room.rng() * 6);
-    d2 = 1 + Math.floor(room.rng() * 6);
-  }
-  room.dice = [d1, d2];
-  const total = d1 + d2;
-  const dbl = d1 === d2;
-  pushLog(room, `${p.name} 掷出 ${d1} + ${d2}${dbl ? '，双数！' : ''}`, 'dice');
-
+function finishRoll(room, p, total, dbl) {
   if (p.inJail) {
     if (dbl) {
       p.inJail = false;
@@ -1190,7 +1324,7 @@ function doRoll(room) {
       pushLog(room, `${p.name} 掷出双数，成功出狱`, 'jail');
       moveBy(room, p, total);
       resolveLanding(room, p);
-      if (room.phase === 'rent' || room.phase === 'debt' || room.phase === 'ended') { room.again = false; return; }
+      if (room.phase === 'rent' || room.phase === 'debt' || room.phase === 'ended' || room.phase === 'card') { room.again = false; return; }
       room.phase = room.pendingBuy != null ? 'buy' : 'end';
     } else {
       p.jailTurns += 1;
@@ -1205,7 +1339,7 @@ function doRoll(room) {
         p.jailTurns = 0;
         moveBy(room, p, total);
         resolveLanding(room, p);
-        if (room.phase === 'rent' || room.phase === 'debt' || room.phase === 'ended') {
+        if (room.phase === 'rent' || room.phase === 'debt' || room.phase === 'ended' || room.phase === 'card') {
           room.again = false;
           return;
         }
@@ -1229,8 +1363,92 @@ function doRoll(room) {
   room.again = dbl;
   moveBy(room, p, total);
   resolveLanding(room, p);
-  if (room.phase === 'ended' || room.phase === 'debt' || room.phase === 'rent') return;
+  if (room.phase === 'ended' || room.phase === 'debt' || room.phase === 'rent' || room.phase === 'card') return;
   room.phase = room.pendingBuy != null ? 'buy' : room.again && !p.inJail ? 'roll' : 'end';
+}
+
+function doRoll(room) {
+  const p = currentPlayer(room);
+  if (p.forcedDice) {
+    const v = Math.max(2, Math.min(12, Math.floor(p.forcedDice)));
+    p.forcedDice = 0;
+    const d1 = Math.min(6, v - 1);
+    const d2 = v - d1;
+    room.dice = [d1, d2];
+    room.moveTotal = v;
+    room.rollDouble = d1 === d2;
+    pushLog(room, `${p.name} 用遥控骰子指定 ${v} 点`, 'card');
+    if ((p.planPoints || 0) > 0 && !p.inJail) {
+      room.phase = 'adjust';
+      room.turnStartedAt = Date.now();
+      return;
+    }
+    finishRoll(room, p, v, d1 === d2);
+    return;
+  }
+  if (room.diceMode === 'classic') {
+    const d1 = 1 + Math.floor(room.rng() * 6);
+    const d2 = 1 + Math.floor(room.rng() * 6);
+    room.dice = [d1, d2];
+    room.moveTotal = d1 + d2;
+    room.rollDouble = d1 === d2;
+    pushLog(room, `${p.name} 掷出 ${d1} + ${d2}${d1 === d2 ? '，双数！' : ''}`, 'dice');
+    if ((p.planPoints || 0) > 0 && !p.inJail) {
+      room.phase = 'adjust';
+      room.turnStartedAt = Date.now();
+      return;
+    }
+    finishRoll(room, p, d1 + d2, d1 === d2);
+    return;
+  }
+  const dice = [1, 2, 3].map(() => 1 + Math.floor(room.rng() * 6));
+  const pairs = [[0, 1], [0, 2], [1, 2]].map(([a, b]) => ({
+    dice: [dice[a], dice[b]],
+    total: dice[a] + dice[b],
+    double: dice[a] === dice[b],
+  }));
+  room.diceOptions = pairs;
+  room.dicePick = null;
+  room.moveTotal = null;
+  room.rollDouble = false;
+  room.phase = 'dice';
+  room.turnStartedAt = Date.now();
+  pushLog(room, `${p.name} 掷出 ${dice.join(' / ')}，请选择两个骰子`, 'dice');
+}
+
+function pickDice(room, p, idx) {
+  const opt = (room.diceOptions || [])[idx];
+  if (!opt) return fail('骰子选项不存在');
+  room.dicePick = idx;
+  room.dice = opt.dice.slice();
+  room.moveTotal = opt.total;
+  room.rollDouble = opt.double;
+  pushLog(room, `${p.name} 选择 ${opt.dice[0]} + ${opt.dice[1]} = ${opt.total}${opt.double ? '，双数！' : ''}`, 'dice');
+  if ((p.planPoints || 0) > 0 && !p.inJail) {
+    room.phase = 'adjust';
+    room.turnStartedAt = Date.now();
+    room.seq++;
+    return ok();
+  }
+  finishRoll(room, p, opt.total, opt.double);
+  room.seq++;
+  return ok();
+}
+
+function adjustRoll(room, p, delta) {
+  const d = Number(delta) || 0;
+  if (d !== 0) {
+    if ((p.planPoints || 0) <= 0) return fail('没有规划点');
+    const next = Math.max(2, Math.min(12, (room.moveTotal || 0) + d));
+    if (next === room.moveTotal) return fail('点数无法再调整');
+    p.planPoints -= 1;
+    room.moveTotal = next;
+    room.rollDouble = false;
+    pushLog(room, `${p.name} 花 1 规划点，把点数调整为 ${next}`, 'dice');
+  }
+  finishRoll(room, p, room.moveTotal || 0, room.rollDouble);
+  room.seq++;
+  return ok();
 }
 
 function doBuy(room, p) {
@@ -1373,6 +1591,45 @@ export function act(room, playerId, action) {
 // 防止掉线/幽灵玩家卡死对局：超时自动跳过
 export function tickStall(room, now = Date.now()) {
   if (room.phase === 'lobby' || room.phase === 'ended') return false;
+  if (room.phase === 'mission') {
+    if (!room.turnStartedAt) { room.turnStartedAt = now; return false; }
+    if (now - room.turnStartedAt < 30000) return false;
+    autoPickMissions(room);
+    room.seq++;
+    return true;
+  }
+  if (room.phase === 'item') {
+    const p = currentPlayer(room);
+    if (!p) return false;
+    if (!room.turnStartedAt) { room.turnStartedAt = now; return false; }
+    if (now - room.turnStartedAt < 20000) return false;
+    act(room, p.id, { type: 'pickItem', i: 0 });
+    return true;
+  }
+  if (room.phase === 'card' && room.cardChoice) {
+    const p = byId(room, room.cardChoice.playerId);
+    if (!p) return false;
+    const started = room.cardStartedAt || room.turnStartedAt || now;
+    if (now - started < 20000) return false;
+    chooseCard(room, p, 0);
+    return true;
+  }
+  if (room.phase === 'dice') {
+    const p = currentPlayer(room);
+    if (!p) return false;
+    if (!room.turnStartedAt) { room.turnStartedAt = now; return false; }
+    if (now - room.turnStartedAt < 20000) return false;
+    pickDice(room, p, botPickDice(room, p));
+    return true;
+  }
+  if (room.phase === 'adjust') {
+    const p = currentPlayer(room);
+    if (!p) return false;
+    if (!room.turnStartedAt) { room.turnStartedAt = now; return false; }
+    if (now - room.turnStartedAt < 20000) return false;
+    adjustRoll(room, p, 0);
+    return true;
+  }
   if (room.phase === 'debt' && room.debt) {
     const payer = byId(room, room.debt.payerId);
     if (!payer) return false;
@@ -1510,6 +1767,11 @@ function actInner(room, playerId, action) {
     return ok();
   }
 
+  if (room.phase === 'mission') {
+    if (type !== 'pickMission') return fail('请先选择秘密任务');
+    return pickMission(room, p, action);
+  }
+
   if (room.phase === 'lobby') {
     if (type === 'start') {
       if (p.id !== room.hostId) return fail('只有房主能开始游戏');
@@ -1629,6 +1891,40 @@ function actInner(room, playerId, action) {
   }
 
   if (!cur || cur.id !== p.id) return fail('还没轮到你');
+
+  if (room.phase === 'item') {
+    if (type !== 'pickItem') return fail('请先选择一件道具');
+    const idx = Number(action.i);
+    if (!p.itemChoices || !Number.isInteger(idx) || idx < 0 || idx >= p.itemChoices.length) return fail('道具不存在');
+    if (p.items.length >= MAX_ITEMS) {
+      p.itemChoices = [];
+      room.phase = 'roll';
+      room.seq++;
+      return ok();
+    }
+    const item = p.itemChoices[idx];
+    p.items.push(item);
+    p.itemChoices = [];
+    room.phase = 'roll';
+    room.seq++;
+    pushLog(room, `${p.name} 选择了道具「${ITEMS[item].name}」`, 'card');
+    return ok();
+  }
+
+  if (room.phase === 'card') {
+    if (type !== 'chooseCard') return fail('请先选择一张卡牌');
+    return chooseCard(room, p, Number(action.i));
+  }
+
+  if (room.phase === 'dice') {
+    if (type !== 'pickDice') return fail('请先选择两个骰子');
+    return pickDice(room, p, Number(action.i));
+  }
+
+  if (room.phase === 'adjust') {
+    if (type !== 'adjustRoll') return fail('请确认点数');
+    return adjustRoll(room, p, Number(action.delta));
+  }
 
   if (room.phase === 'roll') {
     if (type === 'roll') { doRoll(room); normalize(room); room.seq++; return ok(); }
@@ -1751,6 +2047,59 @@ function botFindTrade(room, p) {
   return null;
 }
 
+function landingScore(room, p, total) {
+  const raw = p.pos + total;
+  const dest = raw % 40;
+  let score = raw >= 40 ? 60 : 0;
+  const tile = BOARD[dest];
+  if (tile.type === 'prop' || tile.type === 'rail' || tile.type === 'util') {
+    const ownerId = room.owners[dest];
+    if (!ownerId) score += 40 + (tile.price <= p.cash ? 20 : 0);
+    else if (ownerId === p.id) score += 10;
+    else if (room.mortgaged[dest]) score += 15;
+    else {
+      const info = rentInfo(room, dest);
+      score -= Math.min(150, (info.total || 0) / 2 + (room.houses[dest] || 0) * 10);
+    }
+  } else if (tile.type === 'chance' || tile.type === 'chest') score += 25;
+  else if (tile.type === 'tax') score -= (tile.amount || 0) / 10;
+  else if (tile.type === 'gotojail' || tile.type === 'jail') score -= 120;
+  else if (tile.type === 'parking') score += 10;
+  else if (tile.type === 'go') score += 40;
+  return score;
+}
+
+function botPickDice(room, p) {
+  const opts = room.diceOptions || [];
+  if (!opts.length) return 0;
+  if (p.inJail) {
+    const dbl = opts.findIndex((o) => o.double);
+    return dbl >= 0 ? dbl : 0;
+  }
+  let best = 0;
+  let bestScore = landingScore(room, p, opts[0].total);
+  for (let i = 1; i < opts.length; i++) {
+    const s = landingScore(room, p, opts[i].total);
+    if (s > bestScore) { best = i; bestScore = s; }
+  }
+  return best;
+}
+
+function botAdjustDelta(room, p) {
+  if ((p.planPoints || 0) <= 0) return 0;
+  const cur = room.moveTotal || 0;
+  const base = landingScore(room, p, cur);
+  let bestDelta = 0;
+  let best = base;
+  for (const d of [-1, 1]) {
+    const t = Math.max(2, Math.min(12, cur + d));
+    if (t === cur) continue;
+    const s = landingScore(room, p, t);
+    if (s > best + 15) { best = s; bestDelta = d; }
+  }
+  return bestDelta;
+}
+
 export function tickBots(room) {
   if (room.phase === 'lobby' || room.phase === 'ended') return false;
 
@@ -1769,6 +2118,14 @@ export function tickBots(room) {
 
   const p = currentPlayer(room);
   if (!p || !p.isBot || p.bankrupt) return false;
+  if (room.phase === 'item') return act(room, p.id, { type: 'pickItem', i: 0 }).ok;
+  if (room.phase === 'dice') return act(room, p.id, { type: 'pickDice', i: botPickDice(room, p) }).ok;
+  if (room.phase === 'adjust') return act(room, p.id, { type: 'adjustRoll', delta: botAdjustDelta(room, p) }).ok;
+  if (room.phase === 'card') {
+    const cc = room.cardChoice;
+    if (!cc || cc.playerId !== p.id) return false;
+    return chooseCard(room, p, botPickCard(cc.options)).ok;
+  }
   const rng = room.rng;
   if (room.phase === 'roll') {
     if (p.inJail) {
@@ -1826,6 +2183,9 @@ export function view(room, youId) {
     turnId: room.phase === 'lobby' || room.phase === 'ended' ? null : cur ? cur.id : null,
     you: youId || null,
     dice: room.dice,
+    diceOptions: room.diceOptions || null,
+    dicePick: room.dicePick,
+    moveTotal: room.moveTotal,
     again: room.again,
     doubles: room.doubles,
     round: room.round,
@@ -1835,6 +2195,11 @@ export function view(room, youId) {
     trade: currentTrade(room),
     debt: room.debt ? { payerId: room.debt.payerId, amount: room.debt.amount, creditorId: room.debt.creditorId } : null,
     rentChoice: room.rentChoice ? { payerId: room.rentChoice.payerId, ownerId: room.rentChoice.ownerId, tile: room.rentChoice.tile, amount: room.rentChoice.amount } : null,
+    cardChoice: room.cardChoice ? {
+      playerId: room.cardChoice.playerId,
+      deck: room.cardChoice.deck,
+      options: room.cardChoice.playerId === youId ? room.cardChoice.options.map((o) => ({ text: o.card.text })) : null,
+    } : null,
     event: room.event && room.event.round === room.round ? room.event : null,
     missionWin: room.missionWin,
     missionMinRound: MISSION_MIN_ROUND,
@@ -1865,7 +2230,15 @@ export function view(room, youId) {
       missionTarget: p.id === youId ? (p.missionTarget || 0) : 0,
       missionRewardBase: (p.id === youId || room.phase === 'ended') ? (p.missionRewardBase || 0) : 0,
       missionProgress: p.id === youId ? missionProgress(room, p) : null,
+      missionOptions: p.id === youId && room.phase === 'mission'
+        ? (p.missionOptions || []).map((id) => {
+          const d = MISSIONS.find((m) => m.id === id);
+          return { id, text: missionText(d, room.players.length), reward: missionRewardBase(d, room.players.length) };
+        })
+        : [],
       tradesThisTurn: p.id === youId ? (p.tradesThisTurn || 0) : 0,
+      itemChoices: p.id === youId ? (p.itemChoices || []) : [],
+      planPoints: p.id === youId ? (p.planPoints || 0) : 0,
       skipTurns: p.skipTurns || 0,
     })),
     owners: room.owners,

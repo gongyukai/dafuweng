@@ -11,13 +11,22 @@ function expect(cond, msg) {
   passed++;
   console.log('  ✓ ' + msg);
 }
+function seqRng(values) {
+  let i = 0;
+  return () => values[i++ % values.length];
+}
 
 function makeGame(n = 2) {
   const room = createRoom('FEAT');
-  room.missionsEnabled = true; // 这些用例测任务系统
+  room.missionsEnabled = true;
+  room.diceMode = 'classic'; // 这些用例测任务系统
   const players = [];
   for (let i = 0; i < n; i++) players.push(addPlayer(room, `P${i + 1}`).player);
   startGame(room);
+  // 二选一任务：测试里统一选第一个选项，进入正常回合
+  for (const p of room.players) {
+    if (!p.missionPicked) act(room, p.id, { type: 'pickMission', i: 0 });
+  }
   room.turn = 0; // 测试默认从第一位玩家开始（正式游戏先手随机）
   return { room, players };
 }
@@ -32,7 +41,11 @@ console.log('\n秘密任务开关');
   expect(act(room, host.id, { type: 'setMissions', enabled: 1 }).ok, '房主可以开启');
   expect(room.missionsEnabled === true, '已开启');
   startGame(room);
-  expect(room.players.every((p) => p.mission), '开启后开局会下发任务');
+  expect(room.phase === 'mission', '开启后开局先选任务');
+  expect(room.players.every((p) => p.missionOptions.length === 2), '每人两个任务选项');
+  for (const p of room.players) act(room, p.id, { type: 'pickMission', i: 0 });
+  expect(room.phase === 'roll', '选完任务进入掷骰');
+  expect(room.players.every((p) => p.mission), '选择后下发任务');
 
   const room2 = createRoom('OPT2');
   addPlayer(room2, 'A');
@@ -220,8 +233,16 @@ console.log('\n道具：经过起点获得');
   p.forcedDice = 5; // 38 + 5 = 43 → 过起点，落在 3
   room.rng = () => 0;
   act(room, p.id, { type: 'roll' });
-  expect(p.items.length === 1, '经过起点拿到 1 张道具');
+  expect(p.itemChoices.length === 2, '经过起点获得两个道具选项');
+  expect(p.items.length === 0, '还没选择，不直接进背包');
   expect(p.cash >= 1500 + 200, '同时领了过路费');
+  room.turn = 0;
+  room.phase = 'item';
+  room.turnStartedAt = Date.now();
+  expect(act(room, p.id, { type: 'pickItem', i: 0 }).ok, '选择第一个道具');
+  expect(p.items.length === 1, '选择后拿到 1 张道具');
+  expect(p.itemChoices.length === 0, '选项清空');
+  expect(room.phase === 'roll', '选完进入掷骰');
 }
 
 console.log('\n道具：手牌上限');
@@ -694,6 +715,162 @@ console.log('\n破产时房东也能计入收租');
   expect(r.ok, '租客宣告破产');
   expect(p1.cash === 1500 + 3, `房东拿到剩余 ¥3（实际 ${p1.cash}）`);
   expect(p1.rentIncome === 3, `房东累计收租计入 ¥3（实际 ${p1.rentIncome}）`);
+}
+
+console.log('\n秘密任务二选一');
+{
+  const room = createRoom('PICK');
+  room.missionsEnabled = true;
+  const a = addPlayer(room, 'A').player;
+  const b = addPlayer(room, 'B').player;
+  startGame(room);
+  expect(room.phase === 'mission', '开局进入任务选择阶段');
+  const va = view(room, a.id);
+  const pa = va.players.find((p) => p.id === a.id);
+  const pb = va.players.find((p) => p.id === b.id);
+  expect(pa.missionOptions.length === 2, '自己能看到两个选项');
+  expect(pb.missionOptions.length === 0, '看不到别人的选项');
+  expect(act(room, a.id, { type: 'pickMission', i: 0 }).ok, 'A 选择第一个任务');
+  expect(room.phase === 'mission', 'B 还没选，继续等待');
+  expect(act(room, b.id, { type: 'pickMission', i: 1 }).ok, 'B 选择第二个任务');
+  expect(room.phase === 'roll', '两人都选完后开始掷骰');
+  expect(a.mission && b.mission, '任务已分配');
+  expect(a.missionOptions.length === 0, '选项已清空');
+
+  const room2 = createRoom('PICK2');
+  room2.missionsEnabled = true;
+  addPlayer(room2, 'A');
+  addPlayer(room2, 'B');
+  startGame(room2);
+  room2.turnStartedAt = Date.now() - 31000;
+  tickStall(room2);
+  expect(room2.phase === 'roll', '超时后自动选任务并开始');
+  expect(room2.players.every((p) => p.mission), '超时也有任务');
+}
+
+console.log('\n抽卡二选一');
+{
+  const { room, players } = makeGame(2);
+  const p = players[0];
+  room.turn = 0;
+  room.phase = 'roll';
+  p.pos = 0;
+  p.forcedDice = 2; // 0 + 2 → 命运格（2）
+  room.chest = [0, 1];
+  room.chestPos = 0;
+  act(room, p.id, { type: 'roll' });
+  expect(room.phase === 'card' && !!room.cardChoice, '踩到命运进入选卡');
+  expect(room.cardChoice.options.length === 2, '抽到两张卡');
+  const vOther = view(room, players[1].id);
+  expect(vOther.cardChoice && vOther.cardChoice.options === null, '别人看不到卡面');
+  const r = act(room, p.id, { type: 'chooseCard', i: 0 });
+  expect(r.ok, '选第一张卡');
+  expect(room.cardChoice === null, '选完清空');
+  expect(room.phase !== 'card', '离开选卡阶段');
+}
+{
+  const room = createRoom('CARD-BOT');
+  room.missionsEnabled = false;
+  addPlayer(room, '甲');
+  const bot = addPlayer(room, '机器人', { isBot: true }).player;
+  startGame(room);
+  room.turn = 1;
+  room.phase = 'card';
+  room.cardChoice = {
+    playerId: bot.id,
+    deck: 'chest',
+    depth: 0,
+    options: [
+      { deck: 'chest', card: { t: 'money', amount: -50, text: '罚款' } },
+      { deck: 'chest', card: { t: 'money', amount: 50, text: '收入' } },
+    ],
+  };
+  const before = bot.cash;
+  expect(tickBots(room), '机器人处理选卡');
+  expect(room.cardChoice === null, '机器人选完卡');
+  expect(bot.cash === before + 50, '机器人选了收益更高的卡');
+}
+
+console.log('\n三骰选二与规划点调整');
+{
+  const room = createRoom('DICE');
+  room.missionsEnabled = false;
+  room.diceMode = 'three';
+  const p = addPlayer(room, 'A').player;
+  addPlayer(room, 'B', { isBot: true });
+  startGame(room);
+  room.turn = 0;
+  room.rng = seqRng([2 / 6, 2 / 6, 0]); // 3,3,1
+  act(room, p.id, { type: 'roll' });
+  expect(room.phase === 'dice' && room.diceOptions.length === 3, '三颗骰子给出三个选项');
+  expect(act(room, p.id, { type: 'pickDice', i: 0 }).ok, '选择 3+3');
+  expect(p.pos === 6, `按选择的点数移动（实际 ${p.pos}）`);
+  expect(room.rollDouble === true, '选到双数');
+}
+{
+  const room = createRoom('DICE2');
+  room.missionsEnabled = false;
+  room.diceMode = 'three';
+  const p = addPlayer(room, 'A').player;
+  addPlayer(room, 'B', { isBot: true });
+  startGame(room);
+  room.turn = 0;
+  room.rng = seqRng([0, 1 / 6, 2 / 6]); // 1,2,3
+  p.planPoints = 1;
+  act(room, p.id, { type: 'roll' });
+  act(room, p.id, { type: 'pickDice', i: 0 }); // 1+2=3
+  expect(room.phase === 'adjust', '有规划点时进入调整');
+  act(room, p.id, { type: 'adjustRoll', delta: 1 });
+  expect(p.pos === 4, `调整 +1 后走 4 格（实际 ${p.pos}）`);
+  expect(p.planPoints === 0, '消耗 1 枚规划点');
+}
+{
+  const room = createRoom('DICE3');
+  room.missionsEnabled = false;
+  room.diceMode = 'three';
+  const p = addPlayer(room, 'A').player;
+  addPlayer(room, 'B', { isBot: true });
+  startGame(room);
+  room.turn = 0;
+  p.inJail = true;
+  p.pos = 10;
+  p.jailTurns = 0;
+  room.rng = seqRng([2 / 6, 2 / 6, 0]); // 3,3,1
+  act(room, p.id, { type: 'roll' });
+  act(room, p.id, { type: 'pickDice', i: 0 }); // 双数 3+3
+  expect(p.inJail === false, '选到双数可以出狱');
+  expect(p.pos === 16, `出狱后移动 6 格（实际 ${p.pos}）`);
+}
+{
+  const room = createRoom('DICE-BOT');
+  room.missionsEnabled = false;
+  room.diceMode = 'three';
+  addPlayer(room, '机器人A', { isBot: true });
+  addPlayer(room, '机器人B', { isBot: true });
+  startGame(room);
+  let guard = 0;
+  while (room.phase === 'roll' || room.phase === 'dice' || room.phase === 'adjust') {
+    tickBots(room);
+    if (guard++ > 20) break;
+  }
+  expect(room.phase !== 'dice' && room.phase !== 'adjust', '机器人能自己选骰子/调整');
+}
+
+console.log('\n道具二选一在下回合开始');
+{
+  const { room, players } = makeGame(2);
+  room.missionsEnabled = false;
+  const [a, b] = players;
+  a.itemChoices = ['dice', 'shield'];
+  room.turn = 1; // 让 b 结束回合，轮到 a
+  room.phase = 'end';
+  room.turnStartedAt = Date.now();
+  expect(act(room, b.id, { type: 'end' }).ok, 'B 结束回合');
+  expect(room.phase === 'item' && room.turn === 0, '轮到 A 时先选道具');
+  const before = a.items.length;
+  expect(act(room, a.id, { type: 'pickItem', i: 1 }).ok, 'A 选择第二个道具');
+  expect(a.items.length === before + 1 && a.items.includes('shield'), '拿到免租卡');
+  expect(room.phase === 'roll', '选完道具进入掷骰');
 }
 
 console.log(`\n🎉 新玩法单测全部通过（${passed} 项断言）`);

@@ -1030,7 +1030,84 @@ function renderAction(v) {  const me = v.players.find((p) => p.id === S.me);
   if (v.phase === 'lobby') { el.innerHTML = actionLobby(v, v.hostId === S.me, me); return; }
   if (v.phase === 'ended') { el.innerHTML = actionEnded(v, v.hostId === S.me); return; }
 
+  if (v.phase === 'mission') {
+    const opts = me.missionOptions || [];
+    if (opts.length) {
+      el.innerHTML = `<div class="act-head"><h3>选择秘密任务</h3><span>二选一</span></div>
+        <p class="act-msg">只有你能看到自己的选项；选好后其他人只会看到「已选好」。</p>
+        <div class="mission-picks">${opts.map((o, i) => `<button class="mission-opt" data-act="pickMission" data-i="${i}">
+          <b>${esc(o.text)}</b><span>基础奖励 ¥${fmt(o.reward)}</span>
+        </button>`).join('')}</div>`;
+    } else {
+      el.innerHTML = `<div class="act-head"><h3>等待中</h3></div>
+        <p class="act-msg">等待其他玩家选择秘密任务…</p>`;
+    }
+    return;
+  }
+
   const myTurn = v.turnId === S.me;
+  if (v.phase === 'item') {
+    const opts = me.itemChoices || [];
+    if (myTurn && opts.length) {
+      el.innerHTML = `<div class="act-head"><h3>挑选道具</h3><span>二选一</span></div>
+        <p class="act-msg">你经过了起点，选一件带在身上（手牌上限 3 张）。</p>
+        <div class="mission-picks">${opts.map((id, i) => {
+          const meta = ITEMS[id] || { name: id, desc: '' };
+          return `<button class="mission-opt" data-act="pickItem" data-i="${i}"><b>${esc(meta.name)}</b><span>${esc(meta.desc)}</span></button>`;
+        }).join('')}</div>`;
+    } else {
+      el.innerHTML = `<div class="act-head"><h3>等待中</h3></div><p class="act-msg">等待对方挑选道具…</p>`;
+    }
+    return;
+  }
+  if (v.phase === 'card' && v.cardChoice) {
+    const cc = v.cardChoice;
+    if (cc.playerId === S.me && cc.options) {
+      el.innerHTML = `<div class="act-head"><h3>${cc.deck === 'chance' ? '机会' : '命运'}</h3><span>二选一</span></div>
+        <p class="act-msg">抽到两张卡，选择一张生效，另一张作废。</p>
+        <div class="mission-picks">${cc.options.map((o, i) => `<button class="mission-opt" data-act="chooseCard" data-i="${i}">
+          <b>${esc(o.text)}</b>
+        </button>`).join('')}</div>`;
+    } else {
+      const who = v.players.find((p) => p.id === cc.playerId);
+      el.innerHTML = `<div class="act-head"><h3>等待中</h3></div><p class="act-msg">等待 ${esc(who ? who.name : '对方')} 选卡…</p>`;
+    }
+    return;
+  }
+  if (v.phase === 'dice' && v.diceOptions) {
+    if (myTurn) {
+      const opts = v.diceOptions;
+      el.innerHTML = `<div class="act-head"><h3>选择骰子</h3><span>三选二</span></div>
+        <p class="act-msg">掷出三颗骰子，选两个决定这次走多少格。</p>
+        <div class="mission-picks">${opts.map((o, i) => {
+          const dest = (me.pos + o.total) % 40;
+          return `<button class="mission-opt" data-act="pickDice" data-i="${i}">
+            <b>${o.dice[0]} + ${o.dice[1]} = ${o.total}${o.double ? ' · 双数' : ''}</b>
+            <span>落点：${esc(BOARD[dest].name)}${me.pos + o.total >= 40 ? ' · 经过起点' : ''}</span>
+          </button>`;
+        }).join('')}</div>`;
+    } else {
+      el.innerHTML = `<div class="act-head"><h3>等待中</h3></div><p class="act-msg">等待对方选择骰子…</p>`;
+    }
+    return;
+  }
+  if (v.phase === 'adjust') {
+    if (myTurn) {
+      const total = v.moveTotal;
+      const dest = (me.pos + total) % 40;
+      const pts = me.planPoints || 0;
+      el.innerHTML = `<div class="act-head"><h3>调整点数</h3><span>规划点 ${pts}</span></div>
+        <p class="act-msg">当前 <b>${total}</b> 点，落点 <b>${esc(BOARD[dest].name)}</b>。可以花 1 枚规划点把点数 ±1。</p>
+        <div class="btn-row">
+          <button class="btn" data-act="adjustRoll" data-delta="-1" ${pts > 0 && total > 2 ? '' : 'disabled'}>−1</button>
+          <button class="btn primary" data-act="adjustRoll" data-delta="0">就这样（${total} 点）</button>
+          <button class="btn" data-act="adjustRoll" data-delta="1" ${pts > 0 && total < 12 ? '' : 'disabled'}>+1</button>
+        </div>`;
+    } else {
+      el.innerHTML = `<div class="act-head"><h3>等待中</h3></div><p class="act-msg">等待对方调整点数…</p>`;
+    }
+    return;
+  }
   if (v.phase === 'rent' && v.rentChoice) {
     const rc = v.rentChoice;
     const owner = v.players.find((p) => p.id === rc.ownerId);
@@ -1208,7 +1285,8 @@ $('#action').addEventListener('click', (e) => {
   const piece = btn.dataset.piece;
   const enabled = btn.dataset.enabled;
   const rounds = btn.dataset.rounds !== undefined ? Number(btn.dataset.rounds) : undefined;
-  S.net.send({ type, i, id, piece, enabled, rounds });
+  const delta = btn.dataset.delta !== undefined ? Number(btn.dataset.delta) : undefined;
+  S.net.send({ type, i, id, piece, enabled, rounds, delta });
 });
 
 $('#logBody').addEventListener('scroll', (e) => {

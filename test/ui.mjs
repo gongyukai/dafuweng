@@ -94,9 +94,11 @@ if (hasStart) {
   await sleep(400);
   console.log(`✅ 棋子选择器：${pieces} 种可选，回合数 ${rounds} 档`);
   await ev("document.querySelector('button[data-act=\"start\"]').click()");
+  await until("!!document.querySelector('[data-act=\"pickMission\"]')", '秘密任务二选一', 10000);
+  await ev("document.querySelector('[data-act=\"pickMission\"]').click()");
   await until("!!document.querySelector('button[data-act=\"roll\"]')", '开局后的掷骰按钮', 30000);
   await until("!!document.querySelector('.mission-card')", '秘密任务卡');
-  console.log('✅ 大厅开始游戏，秘密任务已下发');
+  console.log('✅ 大厅开始游戏，秘密任务二选一并下发');
 
   // 隐藏房主面板：输入 dafuweng
   await ev("(() => { for (const ch of 'laoban') document.dispatchEvent(new KeyboardEvent('keydown', { key: ch })); })()");
@@ -147,6 +149,14 @@ if (hasStart) {
 const hasRoll = await ev("!!document.querySelector('button[data-act=\"roll\"]')");
 assert(hasRoll, '没有掷骰子按钮');
 await ev("document.querySelector('button[data-act=\"roll\"]').click()");
+// 三骰选二：先选一组骰子，再（如有）确认调整
+await until("!!document.querySelector('[data-act=\"pickDice\"]')", '骰子选择', 10000);
+await ev("document.querySelector('[data-act=\"pickDice\"]').click()");
+await sleep(150);
+if (await ev("!!document.querySelector('[data-act=\"adjustRoll\"]')")) {
+  await ev("document.querySelector('[data-act=\"adjustRoll\"][data-delta=\"0\"]').click()");
+  await sleep(150);
+}
 // 立刻开始采样，避免等字幕时棋子已经走完
 const anim = JSON.parse(await ev(`(async () => {
   const el = document.querySelector('.tk.me') || document.querySelector('.tk');
@@ -292,6 +302,52 @@ if (await ev("!!window.__dmj")) {
   console.log('✅ 聊天未读红点（1 条，进入后清除）');
 }
 await ev("document.querySelector('#modalClose').click()");
+
+// 道具二选一 / 抽卡二选一界面
+if (await ev("!!window.__dmj")) {
+  await ev(`(() => {
+    const S = window.__dmj; const room = S.net.host.room;
+    const me = room.players.find((p) => p.id === S.me);
+    me.items = [];
+    room.turn = room.players.findIndex((p) => p.id === S.me);
+    room.phase = 'item';
+    me.itemChoices = ['dice', 'shield'];
+    room.turnStartedAt = Date.now();
+    S.net.host.publish();
+  })()`);
+  await until("!!document.querySelector('[data-act=\"pickItem\"]')", '道具二选一', 5000);
+  const ib = await ev("window.__dmj.view.players.find((p) => p.id === window.__dmj.me).items.length");
+  await ev("document.querySelector('[data-act=\"pickItem\"]').click()");
+  await sleep(500);
+  const ia = await ev("window.__dmj.view.players.find((p) => p.id === window.__dmj.me).items.length");
+  assert(ia === ib + 1, '道具二选一后拿到一件');
+  console.log('✅ 道具二选一界面');
+
+  await ev(`(() => {
+    const S = window.__dmj; const room = S.net.host.room;
+    const me = room.players.find((p) => p.id === S.me);
+    room.turn = room.players.findIndex((p) => p.id === S.me);
+    room.phase = 'card';
+    room.cardChoice = {
+      playerId: S.me,
+      deck: 'chest',
+      depth: 0,
+      options: [
+        { deck: 'chest', card: { t: 'money', amount: 50, text: '测试收入 ¥50' } },
+        { deck: 'chest', card: { t: 'money', amount: -50, text: '测试支出 ¥50' } },
+      ],
+    };
+    room.turnStartedAt = Date.now();
+    S.net.host.publish();
+  })()`);
+  await until("!!document.querySelector('[data-act=\"chooseCard\"]')", '抽卡二选一', 5000);
+  const cb = await ev("window.__dmj.view.players.find((p) => p.id === window.__dmj.me).cash");
+  await ev("document.querySelector('[data-act=\"chooseCard\"]').click()");
+  await sleep(600);
+  const ca = await ev("window.__dmj.view.players.find((p) => p.id === window.__dmj.me).cash");
+  assert(ca === cb + 50, '选择卡牌后生效');
+  console.log('✅ 抽卡二选一界面');
+}
 
 // 7. 截图
 const shot = await send('Page.captureScreenshot', { format: 'png' });

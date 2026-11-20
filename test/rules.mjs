@@ -24,6 +24,7 @@ function seqRng(values) {
 function makeGame(players = 2) {
   const room = createRoom('TEST');
   const list = [];
+  room.diceMode = 'classic';
   for (let i = 0; i < players; i++) list.push(addPlayer(room, `玩家${i + 1}`).player);
   startGame(room);
   room.turn = 0; // 测试默认从第一位玩家开始（正式游戏里先手是随机的）

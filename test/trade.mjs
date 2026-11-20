@@ -12,6 +12,7 @@ function expect(cond, msg) {
 function makeGame() {
   const room = createRoom('TRADE');
   const p1 = addPlayer(room, '甲').player;
+  room.diceMode = 'classic';
   const p2 = addPlayer(room, '乙').player;
   startGame(room);
   room.turn = 0; // 先手固定为甲，便于测试
@@ -140,6 +141,7 @@ console.log('\n交易后租金归属');
 console.log('\n机器人回应交易');
 {
   const room = createRoom('BOT');
+  room.diceMode = 'classic';
   const p1 = addPlayer(room, '甲').player;
   const bot = addPlayer(room, '机器人', { isBot: true }).player;
   startGame(room);
@@ -158,6 +160,7 @@ console.log('\n机器人回应交易');
 
   // 反向：甲用台北换香港，机器人亏 → 拒绝
   const room2 = createRoom('BOT2');
+  room2.diceMode = 'classic';
   const a = addPlayer(room2, '甲').player;
   const b = addPlayer(room2, '机器人', { isBot: true }).player;
   startGame(room2);
