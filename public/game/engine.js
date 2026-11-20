@@ -192,6 +192,7 @@ export function resetRoom(room) {
   room.houses = {};
   room.mortgaged = {};
   room.turn = 0;
+  room.startTurn = 0;
   room.round = 1;
   room.lastEventRound = 0;
   room.dice = [0, 0];
@@ -434,6 +435,7 @@ export function startGame(room) {
   room.phase = 'roll';
   // 起手顺序随机：随机抽一位先手，之后按座位轮转
   room.turn = Math.floor(room.rng() * room.players.length);
+  room.startTurn = room.turn;
   room.altUses = 10;
   room.round = 1;
   room.roundLimit = room.roundLimit || DEFAULT_ROUND_LIMIT;
@@ -734,8 +736,13 @@ function goToJail(room, p) {
 
 // ---------------- 道具 ----------------
 
-function grantItem(room, p, id) {
-  if (p.items.length >= MAX_ITEMS) {
+function removeOneItem(p, id) {
+  const idx = p.items.indexOf(id);
+  if (idx >= 0) p.items.splice(idx, 1);
+  return idx >= 0;
+}
+
+function grantItem(room, p, id) {  if (p.items.length >= MAX_ITEMS) {
     pushLog(room, `${p.name} 手牌已满（${MAX_ITEMS} 张），道具作废`, 'card');
     return null;
   }
@@ -909,7 +916,7 @@ function resolveLanding(room, p, depth = 0) {
           return;
         }
         if (p.items.includes('shield') && p.isBot) {
-          p.items = p.items.filter((x) => x !== 'shield');
+          removeOneItem(p, 'shield');
           p.itemsUsed = (p.itemsUsed || 0) + 1;
           pushLog(room, `${p.name} 用免租卡抵消了 ${owner.name} 的 ${tile.name} 租金 ¥${info.total}`, 'card');
         } else {
@@ -1080,7 +1087,12 @@ function nextTurn(room) {
         pushLog(room, `${p.name} 被神秘力量定住，跳过本回合`, 'info');
         continue;
       }
-      if (i <= prev) room.round += 1;
+      // 以随机先手为回合边界：轮到/越过先手时才进入下一回合
+      const start = room.startTurn ?? 0;
+      const crossedStart = i > prev
+        ? (start > prev && start <= i)
+        : (start > prev || start <= i);
+      if (crossedStart) room.round += 1;
       room.turn = i;
       room.phase = 'roll';
       p.tradesThisTurn = 0;
@@ -1547,7 +1559,7 @@ function actInner(room, playerId, action) {
     const owner = byId(room, rc.ownerId);
     if (type === 'useShield') {
       if (!p.items.includes('shield')) return fail('没有免租卡');
-      p.items = p.items.filter((x) => x !== 'shield');
+      removeOneItem(p, 'shield');
       p.itemsUsed = (p.itemsUsed || 0) + 1;
       room.rentChoice = null;
       pushLog(room, `${p.name} 用免租卡抵消了 ${owner ? owner.name : '对方'} 的租金 ¥${rc.amount}`, 'card');

@@ -190,6 +190,7 @@ console.log('\n结算不再叠加任务加成');
   room.round = 50;
   room.roundLimit = 50;
   room.turn = 2;
+  room.startTurn = 0; // 从 2 结束会绕回 0，触发第 51 回合结算
   room.phase = 'end';
   room.pendingBuy = null;
   act(room, players[2].id, { type: 'end' });
@@ -319,6 +320,7 @@ console.log('\n全场事件');
   const { room, players } = makeGame(2);
   room.round = 4;
   room.turn = 1;
+  room.startTurn = 0;
   room.phase = 'end';
   act(room, players[1].id, { type: 'end' });
   expect(room.round === 5, '进入第 5 回合');
@@ -555,6 +557,63 @@ console.log('\n长按入口限 10 次');
   expect(!act(room, host.id, { type: 'hostGrant', targetId: other.id, amount: 1, source: 'alt' }).ok, '第 11 次被拒绝');
   expect(act(room, host.id, { type: 'hostGrant', targetId: other.id, amount: 1, source: 'command' }).ok, '密令入口不限次数');
   expect(view(room, host.id).altUses === 0, '视图里剩余次数为 0');
+}
+
+console.log('\n一次免租只消耗一张卡');
+{
+  const { room, players } = makeGame(2);
+  const p = players[0];
+  const other = players[1];
+  p.items = ['shield', 'shield'];
+  room.owners[1] = other.id;
+  room.rentChoice = { payerId: p.id, ownerId: other.id, tile: 1, amount: 50 };
+  room.phase = 'rent';
+  expect(act(room, p.id, { type: 'useShield' }).ok, '使用免租卡成功');
+  expect(p.items.filter((x) => x === 'shield').length === 1, `还剩一张免租卡（实际 ${p.items.length} 张手牌）`);
+  expect(p.itemsUsed === 1, '道具使用计数为 1');
+}
+
+console.log('\n机器人一次免租也只消耗一张');
+{
+  const room = createRoom('BS');
+  room.missionsEnabled = false;
+  const a = addPlayer(room, 'A', { isBot: true }).player;
+  const b = addPlayer(room, 'B', { isBot: true }).player;
+  startGame(room);
+  room.turn = 0;
+  room.phase = 'roll';
+  room.owners[1] = b.id;
+  a.pos = 39;
+  a.forcedDice = 2;
+  a.items = ['shield', 'shield', 'dice'];
+  act(room, a.id, { type: 'roll' });
+  expect(a.items.filter((x) => x === 'shield').length === 1, `机器人一次免租后还剩一张（实际 ${a.items.filter((x) => x === 'shield').length}）`);
+}
+
+console.log('\n随机先手不破坏回合公平');
+{
+  const room = createRoom('FAIR');
+  room.missionsEnabled = false;
+  const players = [];
+  for (let i = 0; i < 4; i++) players.push(addPlayer(room, 'F' + i).player);
+  startGame(room);
+  room.startTurn = 1;
+  room.turn = 1;
+  room.round = 1;
+  room.roundLimit = 3;
+  room.phase = 'end';
+  const counts = {};
+  let guard = 0;
+  while (room.phase !== 'ended' && guard < 40) {
+    const cur = room.players[room.turn];
+    counts[cur.id] = (counts[cur.id] || 0) + 1;
+    room.phase = 'end';
+    act(room, cur.id, { type: 'end' });
+    guard++;
+  }
+  expect(room.phase === 'ended', '到达回合上限后结束');
+  expect(guard === 12, `3 回合 × 4 人 = 12 次行动（实际 ${guard}）`);
+  expect(players.every((p) => counts[p.id] === 3), `每人正好 3 次行动（${players.map((p) => counts[p.id]).join('/')}）`);
 }
 
 console.log(`\n🎉 新玩法单测全部通过（${passed} 项断言）`);
