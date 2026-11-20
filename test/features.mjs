@@ -616,4 +616,84 @@ console.log('\n随机先手不破坏回合公平');
   expect(players.every((p) => counts[p.id] === 3), `每人正好 3 次行动（${players.map((p) => counts[p.id]).join('/')}）`);
 }
 
+console.log('\n赎回价格不再因浮点误差多收 1 块');
+{
+  const { room, players } = makeGame(2);
+  room.missionsEnabled = false;
+  const p = players[0];
+  room.owners[5] = p.id;
+  room.mortgaged[5] = true;
+  p.cash = 110;
+  room.turn = 0;
+  room.phase = 'end';
+  const r = act(room, p.id, { type: 'unmortgage', i: 5 });
+  expect(r.ok, '正好 ¥110 可以赎回台北车站');
+  expect(p.cash === 0, `赎回后现金为 0（实际 ${p.cash}）`);
+  expect(!room.mortgaged[5], '赎回后抵押状态清除');
+}
+
+console.log('\n满员大厅离线玩家会让出座位');
+{
+  const room = createRoom('FULL');
+  const list = [];
+  for (let i = 0; i < 6; i++) list.push(addPlayer(room, 'P' + i).player);
+  room.hostId = list[5].id; // 让最后一位（即将离线的人）当房主
+  list[5].connected = false;
+  const r = addPlayer(room, '新人');
+  expect(r.ok, '离线玩家让位后新人可以加入');
+  expect(room.players.length === 6, '人数仍然为 6');
+  expect(room.players.some((p) => p.name === '新人'), '新人已在房间里');
+  expect(room.hostId === list[0].id, '房主自动转给在线的第一位玩家');
+  expect(room.players.find((p) => p.id === list[0].id).isHost, '新房主标记正确');
+}
+
+console.log('\n机器人不会卡在失效的报价上');
+{
+  const room = createRoom('STALL');
+  room.missionsEnabled = false;
+  const human = addPlayer(room, '甲').player;
+  const bot = addPlayer(room, '机器人', { isBot: true }).player;
+  startGame(room);
+  room.turn = 0;
+  room.owners[5] = bot.id;
+  human.cash = 300;
+  bot.cash = 500;
+  const offer = act(room, human.id, { type: 'tradeOffer', toId: bot.id, giveCash: 220, getTiles: [5], giveTiles: [], getCash: 0 });
+  expect(offer.ok, '发起 ¥220 换车站的报价');
+  human.cash = 200; // 发起人随后把钱花掉，报价已无法成交
+  room.trade.createdAt = Date.now() - 5000;
+  expect(tickBots(room), '机器人尝试处理报价');
+  expect(room.trade === null, '失效报价被拒绝，不会一直挂着');
+  expect(!tickBots(room), '报价处理后不再占用机器人回合');
+}
+
+console.log('\n别人破产不会取消你的双数奖励');
+{
+  const { room, players } = makeGame(3);
+  room.missionsEnabled = false;
+  const host = players.find((p) => p.id === room.hostId);
+  const other = players.find((p) => p.id !== host.id);
+  room.turn = 0;
+  room.again = true; // 当前玩家掷出双数，等待再掷一次
+  const r = act(room, host.id, { type: 'hostBankrupt', targetId: other.id });
+  expect(r.ok, '房主强制另一名玩家破产');
+  expect(room.again === true, '当前玩家的双数奖励保留');
+  expect(room.phase !== 'ended', '还有两人存活，对局继续');
+}
+
+console.log('\n破产时房东也能计入收租');
+{
+  const { room, players } = makeGame(2);
+  room.missionsEnabled = false;
+  const [p1, p2] = players;
+  room.turn = 1;
+  room.phase = 'debt';
+  p2.cash = 3;
+  room.debt = { payerId: p2.id, amount: 4, creditorId: p1.id, resume: 'end', after: null };
+  const r = act(room, p2.id, { type: 'declareBankrupt' });
+  expect(r.ok, '租客宣告破产');
+  expect(p1.cash === 1500 + 3, `房东拿到剩余 ¥3（实际 ${p1.cash}）`);
+  expect(p1.rentIncome === 3, `房东累计收租计入 ¥3（实际 ${p1.rentIncome}）`);
+}
+
 console.log(`\n🎉 新玩法单测全部通过（${passed} 项断言）`);

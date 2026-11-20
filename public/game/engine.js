@@ -239,7 +239,20 @@ export function resetRoom(room) {
 
 export function addPlayer(room, name, opts = {}) {
   if (room.phase !== 'lobby') return { ok: false, err: '游戏已经开始，无法加入' };
-  if (room.players.length >= MAX_PLAYERS) return { ok: false, err: '房间已满（最多 6 人）' };
+  if (room.players.length >= MAX_PLAYERS) {
+    // 大厅满员时，先让已经离线的玩家让出座位
+    const idx = room.players.findIndex((p) => !p.isBot && !p.connected);
+    if (idx < 0) return { ok: false, err: '房间已满（最多 6 人）' };
+    const gone = room.players[idx];
+    room.players.splice(idx, 1);
+    room.players.forEach((p, i) => { p.color = COLORS[i % COLORS.length]; });
+    if (room.hostId === gone.id) {
+      const nextHost = room.players.find((p) => !p.isBot);
+      room.hostId = nextHost ? nextHost.id : null;
+      if (nextHost) nextHost.isHost = true;
+    }
+    pushLog(room, `${gone.name} 已离线，让出座位`, 'system');
+  }
   const clean = String(name || '').trim().slice(0, 10) || '玩家';
   if (!opts.isBot && room.players.some((p) => !p.isBot && p.name === clean)) {
     return { ok: false, err: '昵称已被占用，换一个名字' };
@@ -598,6 +611,7 @@ function bankrupt(room, p, creditorId) {
   }
   if (creditor && !creditor.bankrupt) {
     creditor.cash += p.cash;
+    addRentIncome(room, creditorId, p.cash);
     if (p.cash > 0) pushLog(room, `${p.name} 剩余 ¥${p.cash} 交给 ${creditor.name}`, 'money');
   }
   p.cash = 0;
@@ -606,7 +620,9 @@ function bankrupt(room, p, creditorId) {
   p.jailTurns = 0;
   p.jailCards = 0;
   if (room.trade && (room.trade.fromId === p.id || room.trade.toId === p.id)) room.trade = null;
-  room.again = false;
+  // 只有当前玩家破产才结束他的回合；别人破产不应清掉当前玩家的双数奖励
+  const cur = currentPlayer(room);
+  if (cur && cur.id === p.id) room.again = false;
   room.debt = null;
   pushLog(room, `${p.name} 破产了！`, 'bankrupt');
   checkEnd(room);
@@ -725,7 +741,8 @@ function goToJail(room, p) {
   p.pos = 10;
   p.inJail = true;
   p.jailTurns = 0;
-  room.again = false;
+  const cur = currentPlayer(room);
+  if (cur && cur.id === p.id) room.again = false;
   p.jailCount = (p.jailCount || 0) + 1;
   pushLog(room, `${p.name} 被送进监狱（第 ${p.jailCount} 次）`, 'jail');
   if (p.jailCount % 3 === 0) {
@@ -1316,7 +1333,7 @@ function doUnmortgage(room, p, i) {
   if (!tile) return fail('格子不存在');
   if (room.owners[i] !== p.id) return fail('这不是你的地');
   if (!room.mortgaged[i]) return fail('这块地没有抵押');
-  const cost = Math.ceil(tile.price * 0.55);
+  const cost = Math.ceil((tile.price * 55) / 100);
   if (p.cash < cost) return fail(`赎回需要 ¥${cost}，现金不足`);
   p.cash -= cost;
   room.mortgaged[i] = false;
@@ -1583,7 +1600,8 @@ function actInner(room, playerId, action) {
     if (!d) { room.phase = 'end'; return fail('状态异常，请重新操作'); }
     if (p.id !== d.payerId) return fail('等待对方筹钱');
     if (type === 'declareBankrupt') {
-      transferCash(room, p, d.creditorId, d.amount);
+      const paid = transferCash(room, p, d.creditorId, d.amount);
+      addRentIncome(room, d.creditorId, paid);
       room.debt = null;
       bankrupt(room, p, d.creditorId);
       room.seq++;
@@ -1742,7 +1760,9 @@ export function tickBots(room) {
     const target = byId(room, trade.toId);
     if (target && target.isBot && !target.bankrupt) {
       const accept = botTradeDecision(room, target, trade);
-      act(room, target.id, { type: accept ? 'tradeAccept' : 'tradeReject', id: trade.id });
+      const res = act(room, target.id, { type: accept ? 'tradeAccept' : 'tradeReject', id: trade.id });
+      // 报价已经失效（例如发起人现金变了）时，机器人要主动拒掉，不能一直卡住回合
+      if (!res.ok && accept) act(room, target.id, { type: 'tradeReject', id: trade.id });
       return true;
     }
   }

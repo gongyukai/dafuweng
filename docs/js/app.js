@@ -134,6 +134,12 @@ function syncSubtitles(v) {
   if (!logs.length) return;
   const newest = logs[logs.length - 1].id;
   if (lastLogId == null) { lastLogId = newest; return; }
+  // 「再来一局」后日志编号会从头开始，检测到编号回退就重置字幕游标
+  if (newest < lastLogId) {
+    lastLogId = newest;
+    subQueue.length = 0;
+    return;
+  }
   if (newest <= lastLogId) return;
   const fresh = logs.filter((l) => l.id > lastLogId && SUB_KINDS.has(l.kind));
   lastLogId = newest;
@@ -800,7 +806,8 @@ function actionProps(v, me, myTurn, debtMode = false) {
     const canBuild = myTurn && !debtMode && g && ownsAll && !anyMort && h < 5 && h === minH && me.cash >= cost;
     const canSell = canSellMode && h > 0 && h === maxH;
     const canMort = canSellMode && !v.mortgaged[i] && !groupTiles.some((x) => (v.houses[x] || 0) > 0);
-    const canUnmort = myTurn && !debtMode && v.mortgaged[i] && me.cash >= Math.ceil(t.price * 0.55);
+    const unmortCost = Math.ceil((t.price * 55) / 100);
+    const canUnmort = myTurn && !debtMode && v.mortgaged[i] && me.cash >= unmortCost;
     const label = h >= 5 ? '旅馆' : h > 0 ? `${h} 房` : '';
     return `<div class="prop">
       <span class="swatch" style="background:${g ? g.color : '#7f8f85'}"></span>
@@ -810,7 +817,7 @@ function actionProps(v, me, myTurn, debtMode = false) {
         ${g ? `<button data-act="build" data-i="${i}" ${canBuild ? '' : 'disabled'} title="建造 ¥${cost}">建</button>
         <button data-act="sellHouse" data-i="${i}" ${canSell ? '' : 'disabled'} title="卖房 +¥${Math.floor(cost / 2)}">卖</button>` : ''}
         <button data-act="mortgage" data-i="${i}" ${canMort ? '' : 'disabled'} title="抵押 +¥${Math.floor(t.price / 2)}">抵</button>
-        <button data-act="unmortgage" data-i="${i}" ${canUnmort ? '' : 'disabled'} title="赎回 −¥${Math.ceil(t.price * 0.55)}">赎</button>
+        <button data-act="unmortgage" data-i="${i}" ${canUnmort ? '' : 'disabled'} title="赎回 −¥${unmortCost}">赎</button>
       </span>
     </div>`;
   }).join('');
