@@ -178,15 +178,26 @@ if (endBtn) {
 }
 await sleep(1200);
 
-// 交易弹窗
+// 交易弹窗（把回合切回自己，交易只能在自己回合发起）
+await ev(`(() => { const S = window.__dmj; const room = S.net.host.room; room.turn = room.players.findIndex((p) => p.id === S.me); room.phase = 'end'; room.turnStartedAt = Date.now(); S.net.host.publish(); })()`);
+await sleep(400);
 const hasTrade = await ev("!!document.querySelector('button[data-ui=\"trade\"]')");
 assert(hasTrade, '应有发起交易按钮');
 await ev("document.querySelector('button[data-ui=\"trade\"]').click()");
 await until("!!document.querySelector('.trade-cols')", '交易弹窗');
 const tradeCols = await ev("document.querySelectorAll('.trade-col').length");
 assert(tradeCols === 2, `交易弹窗应有两栏，实际 ${tradeCols}`);
+// 价值差超过 100 时禁止提交
+await ev("(() => { const i = document.querySelector('input[data-cash=\"give\"]'); i.value = '200'; i.dispatchEvent(new Event('input', { bubbles: true })); })()");
+await sleep(200);
+const overDiff = await ev("document.querySelector('.trade-diff')?.textContent || ''");
+assert(overDiff.includes('200'), '交易弹窗显示价值差');
+assert(await ev("document.querySelector('#tradeSubmit').disabled"), '价值差超过 100 时不能提交');
+await ev("(() => { const i = document.querySelector('input[data-cash=\"give\"]'); i.value = '100'; i.dispatchEvent(new Event('input', { bubbles: true })); })()");
+await sleep(200);
+assert(!(await ev("document.querySelector('#tradeSubmit').disabled")), '价值差 100 时可以提交');
 await ev("document.querySelector('#tradeClose').click()");
-console.log('✅ 交易弹窗可打开（两栏）');
+console.log('✅ 交易弹窗可打开，价值差限制生效');
 
 // 道具栏（需要 ?dev=1）
 if (await ev("!!window.__dmj")) {

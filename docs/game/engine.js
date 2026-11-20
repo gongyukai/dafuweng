@@ -226,6 +226,7 @@ export function resetRoom(room) {
     p.missionRewardBase = 0;
     p.rentIncome = 0;
     p.tradesDone = 0;
+    p.tradesThisTurn = 0;
     p.itemsUsed = 0;
     p.forcedDice = 0;
     p.skipTurns = 0;
@@ -267,6 +268,7 @@ export function addPlayer(room, name, opts = {}) {
     missionRewardBase: 0,
     rentIncome: 0,
     tradesDone: 0,
+    tradesThisTurn: 0,
     itemsUsed: 0,
     skipTurns: 0,
     jailCount: 0,
@@ -317,6 +319,20 @@ export function currentTrade(room) {
   return room.trade;
 }
 
+const MAX_TRADE_DIFF = 100;
+
+// 交易内容的实际价值：现金 + 地产（抵押按半价）+ 房子（按造价）
+function tradeSideValue(room, side) {
+  let v = side.cash || 0;
+  for (const i of side.tiles || []) {
+    const tile = BOARD[i];
+    if (!tile) continue;
+    v += room.mortgaged[i] ? Math.floor(tile.price / 2) : tile.price;
+    if (tile.type === 'prop') v += (room.houses[i] || 0) * GROUPS[tile.group].houseCost;
+  }
+  return v;
+}
+
 function handleTrade(room, p, action) {
   if (room.phase === 'lobby' || room.phase === 'ended') return fail('现在不能交易');
   const type = action.type;
@@ -324,6 +340,10 @@ function handleTrade(room, p, action) {
 
   if (type === 'tradeOffer') {
     if (trade) return fail('已经有一笔交易在处理中');
+    const cur = currentPlayer(room);
+    if (!cur || cur.id !== p.id) return fail('只能在自己的回合发起交易');
+    if (room.phase !== 'roll' && room.phase !== 'buy' && room.phase !== 'end') return fail('当前阶段不能交易');
+    if ((p.tradesThisTurn || 0) >= 1) return fail('本回合已经交易过了');
     const to = byId(room, action.toId);
     if (!to || to.bankrupt) return fail('对方不在对局中');
     if (to.id === p.id) return fail('不能和自己交易');
@@ -340,6 +360,8 @@ function handleTrade(room, p, action) {
       if (!tileOkForTrade(room, i, to.id)) return fail(`${BOARD[i] ? BOARD[i].name : '该地块'} 不能交易（不属于对方，或上面有房子）`);
     }
     if (!giveTiles.length && !getTiles.length && !giveCash && !getCash) return fail('交易内容为空');
+    const diff = Math.abs(tradeSideValue(room, { cash: getCash, tiles: getTiles }) - tradeSideValue(room, { cash: giveCash, tiles: giveTiles }));
+    if (diff > MAX_TRADE_DIFF) return fail(`双方交易价值相差 ¥${diff}，不能超过 ¥${MAX_TRADE_DIFF}`);
     room.trade = {
       id: uid('tr'),
       fromId: p.id,
@@ -358,12 +380,16 @@ function handleTrade(room, p, action) {
     if (!trade) return fail('交易已失效');
     if (trade.id !== action.id) return fail('交易已失效');
     if (trade.toId !== p.id) return fail('这不是发给你的交易');
+    const cur = currentPlayer(room);
+    if (!cur || cur.id !== trade.fromId) { room.trade = null; return fail('发起人的回合已结束，交易失效'); }
     const from = byId(room, trade.fromId);
     if (!from || from.bankrupt) { room.trade = null; return fail('对方已破产'); }
     for (const i of trade.give.tiles) if (!tileOkForTrade(room, i, from.id)) return fail('交易内容已变化，请让对方重新发起');
     for (const i of trade.get.tiles) if (!tileOkForTrade(room, i, p.id)) return fail('交易内容已变化，请让对方重新发起');
     if (trade.give.cash > from.cash) return fail('对方现金不足');
     if (trade.get.cash > p.cash) return fail('你的现金不足');
+    const diff = Math.abs(tradeSideValue(room, trade.get) - tradeSideValue(room, trade.give));
+    if (diff > MAX_TRADE_DIFF) return fail(`双方交易价值相差 ¥${diff}，不能超过 ¥${MAX_TRADE_DIFF}`);
     // 抵押地产交易：新业主需向银行支付抵押额 10% 的手续费（官方规则）
     const feeOf = (tiles) => tiles.filter((i) => room.mortgaged[i]).reduce((s, i) => s + Math.floor(BOARD[i].price * 0.05), 0);
     const feeGet = feeOf(trade.give.tiles); // 接收方（p）拿到抵押地的手续费
@@ -381,6 +407,7 @@ function handleTrade(room, p, action) {
     pushLog(room, `交易达成：${from.name} 得到 ${tradeText(room, trade.get)}，${p.name} 得到 ${tradeText(room, trade.give)}`, 'trade');
     from.tradesDone = (from.tradesDone || 0) + 1;
     p.tradesDone = (p.tradesDone || 0) + 1;
+    from.tradesThisTurn = 1;
     room.trade = null;
     room.seq++;
     return ok();
@@ -445,6 +472,7 @@ export function startGame(room) {
     p.jailCount = 0;
     p.rentIncome = 0;
     p.tradesDone = 0;
+    p.tradesThisTurn = 0;
     p.itemsUsed = 0;
   }
   room.owners = {};
@@ -1033,7 +1061,12 @@ function finalizeRanking(room) {
   return ranked;
 }
 
-function nextTurn(room) {  if (room.phase === 'ended') return;
+function nextTurn(room) {
+  if (room.phase === 'ended') return;
+  if (room.trade) {
+    room.trade = null;
+    pushLog(room, '交易随回合结束而失效', 'trade');
+  }
   const n = room.players.length;
   const prev = room.turn;
   room.debt = null;
@@ -1050,6 +1083,7 @@ function nextTurn(room) {  if (room.phase === 'ended') return;
       if (i <= prev) room.round += 1;
       room.turn = i;
       room.phase = 'roll';
+      p.tradesThisTurn = 0;
       room.turnStartedAt = Date.now();
       room.dice = [0, 0];
       room.again = false;
@@ -1660,12 +1694,13 @@ function botTradeDecision(room, bot, trade) {
   const gets = botTradeValue(room, trade.give);   // 机器人得到的
   const gives = botTradeValue(room, trade.get);   // 机器人付出的
   if (gets <= 0 && gives > 0) return false;
-  return gets >= gives * 1.05;
+  return gets >= gives;
 }
 
 // 机器人主动发起交易：差一块地就能凑齐同色时，出价收购
 function botFindTrade(room, p) {
   if (room.trade) return null;
+  if ((p.tradesThisTurn || 0) >= 1) return null;
   if (p.cash < 500) return null;
   for (const g of Object.values(GROUPS)) {
     const own = g.tiles.filter((i) => room.owners[i] === p.id).length;
@@ -1679,8 +1714,8 @@ function botFindTrade(room, p) {
     if ((room.houses[missing] || 0) > 0) continue;
     if (room.mortgaged[missing]) continue;
     const price = BOARD[missing].price;
-    const cash = Math.min(p.cash - 400, Math.floor(price * (owner.isBot ? 1.5 : 1.9)));
-    if (cash < Math.floor(price * 0.9)) continue;
+    const cash = Math.min(p.cash - 400, Math.floor(price + MAX_TRADE_DIFF));
+    if (cash < Math.floor(price - MAX_TRADE_DIFF)) continue;
     return { type: 'tradeOffer', toId: owner.id, giveTiles: [], getTiles: [missing], giveCash: cash };
   }
   return null;
@@ -1798,6 +1833,7 @@ export function view(room, youId) {
       missionTarget: p.id === youId ? (p.missionTarget || 0) : 0,
       missionRewardBase: (p.id === youId || room.phase === 'ended') ? (p.missionRewardBase || 0) : 0,
       missionProgress: p.id === youId ? missionProgress(room, p) : null,
+      tradesThisTurn: p.id === youId ? (p.tradesThisTurn || 0) : 0,
       skipTurns: p.skipTurns || 0,
     })),
     owners: room.owners,

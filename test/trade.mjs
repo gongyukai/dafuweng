@@ -14,6 +14,7 @@ function makeGame() {
   const p1 = addPlayer(room, '甲').player;
   const p2 = addPlayer(room, '乙').player;
   startGame(room);
+  room.turn = 0; // 先手固定为甲，便于测试
   room.owners[1] = p1.id;   // 台北
   room.owners[6] = p2.id;   // 香港
   p1.cash = 500;
@@ -48,6 +49,29 @@ console.log('\n接受交易');
   expect(room.owners[1] === p2.id && room.owners[6] === p1.id, '地产完成交换');
   expect(p1.cash === 450 && p2.cash === 550, '现金结算正确（甲 500-100+50，乙 500+100-50）');
   expect(room.trade === null, '成交后交易清空');
+  expect(p1.tradesThisTurn === 1, '发起方本回合交易次数记为 1');
+  const again = act(room, p1.id, { type: 'tradeOffer', toId: p2.id, giveCash: 10 });
+  expect(!again.ok && /交易过/.test(again.err), '同一回合不能发起第二次交易');
+}
+
+console.log('\n交易规则：回合与价值差');
+{
+  const { room, p1, p2 } = makeGame();
+  const notMyTurn = act(room, p2.id, { type: 'tradeOffer', toId: p1.id, giveCash: 10 });
+  expect(!notMyTurn.ok, '不是自己的回合不能发起交易');
+
+  const ok100 = act(room, p1.id, { type: 'tradeOffer', toId: p2.id, giveCash: 100 });
+  expect(ok100.ok, '价值差正好 ¥100 允许');
+  act(room, p1.id, { type: 'tradeCancel', id: room.trade.id });
+
+  const over = act(room, p1.id, { type: 'tradeOffer', toId: p2.id, giveCash: 101 });
+  expect(!over.ok && /相差/.test(over.err), '价值差超过 ¥100 被拒绝');
+
+  act(room, p1.id, { type: 'tradeOffer', toId: p2.id, giveCash: 10 });
+  room.phase = 'end';
+  const end = act(room, p1.id, { type: 'end' });
+  expect(end.ok, '结束回合');
+  expect(room.trade === null, '回合结束后交易失效');
 }
 
 console.log('\n拒绝与取消');
@@ -119,6 +143,7 @@ console.log('\n机器人回应交易');
   const p1 = addPlayer(room, '甲').player;
   const bot = addPlayer(room, '机器人', { isBot: true }).player;
   startGame(room);
+  room.turn = 0;
   room.owners[1] = p1.id;   // 台北 60
   room.owners[6] = bot.id;  // 香港 100
   p1.cash = 500;
@@ -136,6 +161,7 @@ console.log('\n机器人回应交易');
   const a = addPlayer(room2, '甲').player;
   const b = addPlayer(room2, '机器人', { isBot: true }).player;
   startGame(room2);
+  room2.turn = 0;
   room2.owners[1] = a.id;
   room2.owners[6] = b.id;
   a.cash = 500;

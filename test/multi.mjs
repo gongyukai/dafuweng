@@ -140,20 +140,27 @@ const chatSeen = await sa.waitFor((s) => s.chat.some((c) => c.text === '多人�
 expect(!!chatSeen, 'A 收到 C 的聊天');
 
 console.log('\n玩家间交易');
-const cashBefore = { A: sA.players.find((p) => p.id === ids.A).cash, B: sA.players.find((p) => p.id === ids.B).cash };
+const tradeCurName = names.find((n) => ids[n] === sB.turnId);
+const tradeOtherName = tradeCurName === 'A' ? 'B' : 'A';
+const tradeCurId = ids[tradeCurName];
+const tradeOtherId = ids[tradeOtherName];
+const cashBefore = {
+  cur: sB.players.find((p) => p.id === tradeCurId).cash,
+  other: sB.players.find((p) => p.id === tradeOtherId).cash,
+};
 const offer = await post('/api/act', {
-  token: tokens.A,
-  action: { type: 'tradeOffer', toId: ids.B, giveCash: 100, getCash: 0, giveTiles: [], getTiles: [] },
+  token: tokens[tradeCurName],
+  action: { type: 'tradeOffer', toId: tradeOtherId, giveCash: 100, getCash: 0, giveTiles: [], getTiles: [] },
 });
-expect(offer.status === 200, 'A 向 B 发起 ¥100 交易');
+expect(offer.status === 200, `${tradeCurName} 向 ${tradeOtherName} 发起 ¥100 交易`);
 const offerSeen = await sb.waitFor((s) => !!s.trade);
-expect(offerSeen.trade.fromId === ids.A && offerSeen.trade.toId === ids.B, 'B 收到交易请求');
-const accept = await post('/api/act', { token: tokens.B, action: { type: 'tradeAccept', id: offerSeen.trade.id } });
-expect(accept.status === 200, 'B 接受交易');
+expect(offerSeen.trade.fromId === tradeCurId && offerSeen.trade.toId === tradeOtherId, '对方收到交易请求');
+const accept = await post('/api/act', { token: tokens[tradeOtherName], action: { type: 'tradeAccept', id: offerSeen.trade.id } });
+expect(accept.status === 200, `${tradeOtherName} 接受交易`);
 const afterTrade = await sc.waitFor((s) => s.log.some((l) => l.text.includes('交易达成')));
-const cashA = afterTrade.players.find((p) => p.id === ids.A).cash;
-const cashB = afterTrade.players.find((p) => p.id === ids.B).cash;
-expect(cashA === cashBefore.A - 100 && cashB === cashBefore.B + 100, '第三个客户端看到现金正确变化');
+const cashCur = afterTrade.players.find((p) => p.id === tradeCurId).cash;
+const cashOther = afterTrade.players.find((p) => p.id === tradeOtherId).cash;
+expect(cashCur === cashBefore.cur - 100 && cashOther === cashBefore.other + 100, '第三个客户端看到现金正确变化');
 
 console.log('\n断线重连');
 sb.close();

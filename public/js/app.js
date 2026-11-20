@@ -826,19 +826,39 @@ function sideText(side) {
   return parts.length ? parts.join(' + ') : '什么也不给';
 }
 
+const TRADE_MAX_DIFF = 100;
+
+function tradeTileValue(v, i) {
+  const t = BOARD[i];
+  if (!t) return 0;
+  let val = v.mortgaged[i] ? Math.floor(t.price / 2) : t.price;
+  if (t.type === 'prop' && t.group) val += (v.houses[i] || 0) * GROUPS[t.group].houseCost;
+  return val;
+}
+
+function tradeSideValue(v, side) {
+  let val = side.cash || 0;
+  for (const i of side.tiles || []) val += tradeTileValue(v, i);
+  return val;
+}
+
+
 function tradeBarHTML(v, me) {
   const t = v.trade;
   if (t && t.toId === me.id) {
     const from = v.players.find((p) => p.id === t.fromId);
     if (!from) return '';
+    const diff = Math.abs(tradeSideValue(v, t.get) - tradeSideValue(v, t.give));
+    const over = diff > TRADE_MAX_DIFF;
     return `<div class="trade-ask">
       <div class="ta-head"><img src="${icon(pieceOf(from.piece).file)}" alt="">${esc(from.name)} 想和你交易</div>
       <div class="ta-body">
         <div><span>他给你</span><b>${esc(sideText(t.give))}</b></div>
         <div><span>他要走</span><b>${esc(sideText(t.get))}</b></div>
+        <div><span>价值差</span><b>¥${fmt(diff)}</b></div>
       </div>
       <div class="btn-row">
-        <button class="btn primary" data-act="tradeAccept" data-id="${t.id}">接受</button>
+        <button class="btn primary" data-act="tradeAccept" data-id="${t.id}" ${over ? 'disabled' : ''}>${over ? '价值差超过 ¥100' : '接受'}</button>
         <button class="btn" data-act="tradeReject" data-id="${t.id}">拒绝</button>
       </div>
     </div>`;
@@ -850,6 +870,8 @@ function tradeBarHTML(v, me) {
       <button class="btn tiny" data-act="tradeCancel" data-id="${t.id}">取消</button>
     </div>`;
   }
+  if (v.turnId !== me.id) return '<div class="trade-tip">只能在自己的回合发起交易</div>';
+  if ((me.tradesThisTurn || 0) >= 1) return '<div class="trade-tip">本回合已经交易过了（每回合 1 次）</div>';
   return '<button class="btn wide trade-open" data-ui="trade">' + mi('assets/ui/handshake.svg') + ' 发起交易</button>';
 }
 
@@ -892,7 +914,7 @@ function renderTradeModal() {
     </button>`).join('');
 
   $('#modalCard').innerHTML = `<h2 class="trade-title">玩家间交易</h2>
-    <p class="trade-hint">选地产和现金，对方同意后立刻生效。有房子的地产要先卖掉才能交易。</p>
+    <p class="trade-hint">只能在自己的回合发起，每回合最多 1 次；双方交易内容的实际价值相差不能超过 ¥100。</p>
     <div class="trade-tabs">${tabs}</div>
     <div class="trade-cols">
       <div class="trade-col">
@@ -924,9 +946,16 @@ function updateTradeSummary() {
     for (const i of set) parts.push(BOARD[i].short || BOARD[i].name);
     return parts.length ? parts.join(' + ') : '什么也不给';
   };
-  el.innerHTML = `你付出 <b>${esc(list(S.trade.give, S.trade.giveCash))}</b>，得到 <b>${esc(list(S.trade.get, S.trade.getCash))}</b>`;
+  const v = S.view;
+  const give = { cash: S.trade.giveCash, tiles: [...S.trade.give] };
+  const get = { cash: S.trade.getCash, tiles: [...S.trade.get] };
+  const diff = Math.abs(tradeSideValue(v, get) - tradeSideValue(v, give));
+  const over = diff > TRADE_MAX_DIFF;
+  el.innerHTML = `你付出 <b>${esc(list(S.trade.give, S.trade.giveCash))}</b>，得到 <b>${esc(list(S.trade.get, S.trade.getCash))}</b>
+    <div class="trade-diff${over ? ' over' : ''}">双方价值差 <b>¥${fmt(diff)}</b>（上限 ¥100）</div>`;
   const btn = $('#tradeSubmit');
-  if (btn) btn.disabled = !S.trade.give.size && !S.trade.get.size && !S.trade.giveCash && !S.trade.getCash;
+  const empty = !S.trade.give.size && !S.trade.get.size && !S.trade.giveCash && !S.trade.getCash;
+  if (btn) btn.disabled = empty || over;
 }
 
 function submitTrade() {
