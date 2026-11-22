@@ -1127,11 +1127,13 @@ function renderAction(v) {  const me = v.players.find((p) => p.id === S.me);
       const dest = (me.pos + total) % 40;
       const pts = me.planPoints || 0;
       el.innerHTML = `<div class="act-head"><h3>调整点数</h3><span>规划点 ${pts}</span></div>
-        <p class="act-msg">当前 <b>${total}</b> 点，落点 <b>${esc(BOARD[dest].name)}</b>。可以花 1 枚规划点把点数 ±1。</p>
-        <div class="btn-row">
-          <button class="btn" data-act="adjustRoll" data-delta="-1" ${pts > 0 && total > 2 ? '' : 'disabled'}>−1</button>
-          <button class="btn primary" data-act="adjustRoll" data-delta="0">就这样（${total} 点）</button>
-          <button class="btn" data-act="adjustRoll" data-delta="1" ${pts > 0 && total < 12 ? '' : 'disabled'}>+1</button>
+        <p class="act-msg">当前 <b>${total}</b> 点，落点 <b>${esc(BOARD[dest].name)}</b>。花 1 枚规划点可以把点数 ±1，也可以直接走。</p>
+        <div class="adjust-actions">
+          <button class="btn primary big" data-act="adjustRoll" data-delta="0">就这样走（${total} 点）</button>
+          <div class="adjust-row">
+            <button class="btn" data-act="adjustRoll" data-delta="-1" ${pts > 0 && total > 2 ? '' : 'disabled'}>−1 点</button>
+            <button class="btn" data-act="adjustRoll" data-delta="1" ${pts > 0 && total < 12 ? '' : 'disabled'}>+1 点</button>
+          </div>
         </div>`;
     } else {
       el.innerHTML = `<div class="act-head"><h3>等待中</h3></div><p class="act-msg">等待对方调整点数…</p>`;

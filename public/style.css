@@ -1189,6 +1189,11 @@ button, input { font: inherit; color: inherit; }
   margin-bottom: 10px;
   text-align: center;
 }
+
+.adjust-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.adjust-actions .btn { width: 100%; white-space: normal; }
+.adjust-row { display: flex; gap: 8px; }
+.adjust-row .btn { flex: 1; }
 .trade-actions .btn { min-width: 160px; }
 
 /* ---------------- Toast / 弹窗 ---------------- */
