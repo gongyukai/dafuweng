@@ -807,7 +807,7 @@ console.log('\n三骰选二与规划点调整');
   room.turn = 0;
   room.rng = seqRng([2 / 6, 2 / 6, 0]); // 3,3,1
   act(room, p.id, { type: 'roll' });
-  expect(room.phase === 'dice' && room.diceOptions.length === 3, '三颗骰子给出三个选项');
+  expect(room.phase === 'dice' && room.diceOptions.length >= 2, '三颗骰子给出可选点数（相同总点数会去重）');
   expect(act(room, p.id, { type: 'pickDice', i: 0 }).ok, '选择 3+3');
   expect(p.pos === 6, `按选择的点数移动（实际 ${p.pos}）`);
   expect(room.rollDouble === true, '选到双数');

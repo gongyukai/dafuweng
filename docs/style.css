@@ -515,15 +515,18 @@ button, input { font: inherit; color: inherit; }
   position: absolute;
   top: 10px;
   right: 12px;
-  font-size: clamp(11px, 1.5vh, 15px);
-  font-weight: 700;
-  color: #9fc4b2;
-  background: rgba(0, 0, 0, 0.22);
+  font-size: clamp(15px, 2.2vh, 22px);
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #cfe6d8;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 999px;
-  padding: 3px 10px;
+  padding: 5px 14px;
   z-index: 3;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
-.cc-timer.low { color: #ff9a8a; background: rgba(255, 80, 60, 0.16); }
+.cc-timer.low { color: #ffb0a4; background: rgba(255, 60, 40, 0.22); border-color: rgba(255, 120, 100, 0.6); }
 .die.picked { box-shadow: 0 0 0 2px rgba(240, 210, 140, 0.9), 0 0 14px rgba(240, 210, 140, 0.55); }
 .die.unpicked { opacity: 0.32; filter: grayscale(0.6); }
 .cc-turn-row { display: flex; align-items: center; gap: 8px; }
@@ -562,24 +565,36 @@ button, input { font: inherit; color: inherit; }
 .ccp em { font-style: normal; color: #e9f1ec; }
 .ccp b { color: var(--gold); font-weight: 800; }
 
-.dice-row { display: flex; gap: clamp(8px, 1.4vh, 18px); }
+.dice-row { display: flex; align-items: center; gap: clamp(10px, 1.6vh, 20px); }
 
 .die {
-  width: clamp(38px, 7vh, 78px);
-  aspect-ratio: 1;
+  --die-size: clamp(48px, 9.4vh, 98px);
+  width: var(--die-size);
+  height: var(--die-size);
+  aspect-ratio: 1 / 1;
+  flex: 0 0 auto;
+  align-self: center;
   border-radius: 18%;
   background: linear-gradient(150deg, #fffdf6, #e6dcc4);
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.42), inset 0 -3px 0 rgba(0, 0, 0, 0.12), inset 0 2px 0 #fff;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   grid-template-rows: repeat(3, 1fr);
-  padding: 13%;
-  gap: 4%;
+  padding: 0;
+  gap: 0;
 }
 .die.rolling { animation: shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
-.die.dim { display: grid; place-items: center; opacity: 0.55; }
-.die-q { font-size: 2em; font-weight: 800; color: #a99c82; line-height: 1; }
-.pip { border-radius: 50%; background: #2b2620; opacity: 0; box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.3); }
+.die.dim { display: flex; align-items: center; justify-content: center; opacity: 0.55; }
+.die-q { font-size: 2.4em; font-weight: 800; color: #a99c82; line-height: 1; }
+.pip {
+  width: 68%;
+  height: 68%;
+  align-self: center;
+  justify-self: center;
+  border-radius: 50%;
+  background: #1d1915;
+  opacity: 0;
+}
 .pip.on { opacity: 1; }
 
 .focus-card {

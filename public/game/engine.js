@@ -1410,12 +1410,20 @@ function doRoll(room) {
     return;
   }
   const dice = [1, 2, 3].map(() => 1 + Math.floor(room.rng() * 6));
-  const pairs = [[0, 1], [0, 2], [1, 2]].map(([a, b]) => ({
+  const allPairs = [[0, 1], [0, 2], [1, 2]].map(([a, b]) => ({
     idx: [a, b],
     dice: [dice[a], dice[b]],
     total: dice[a] + dice[b],
     double: dice[a] === dice[b],
   }));
+  // 三个骰子可能出现两个选项总点数相同，去重后只保留一个
+  const pairs = [];
+  const seenTotals = new Set();
+  for (const opt of allPairs) {
+    if (seenTotals.has(opt.total)) continue;
+    seenTotals.add(opt.total);
+    pairs.push(opt);
+  }
   room.diceRoll = dice;
   room.diceOptions = pairs;
   room.dicePick = null;
