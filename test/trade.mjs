@@ -51,8 +51,15 @@ console.log('\n接受交易');
   expect(p1.cash === 450 && p2.cash === 550, '现金结算正确（甲 500-100+50，乙 500+100-50）');
   expect(room.trade === null, '成交后交易清空');
   expect(p1.tradesThisTurn === 1, '发起方本回合交易次数记为 1');
-  const again = act(room, p1.id, { type: 'tradeOffer', toId: p2.id, giveCash: 10 });
-  expect(!again.ok && /交易过/.test(again.err), '同一回合不能发起第二次交易');
+  const second = act(room, p1.id, { type: 'tradeOffer', toId: p2.id, giveCash: 10 });
+  expect(second.ok, '同一回合可以发起第二次交易');
+  act(room, p1.id, { type: 'tradeCancel', id: room.trade.id });
+  act(room, p1.id, { type: 'tradeOffer', toId: p2.id, giveCash: 10 });
+  const s2 = act(room, p2.id, { type: 'tradeAccept', id: room.trade.id });
+  expect(s2.ok, '第二次交易成交');
+  expect(p1.tradesThisTurn === 2, '本回合交易次数记为 2');
+  const third = act(room, p1.id, { type: 'tradeOffer', toId: p2.id, giveCash: 10 });
+  expect(!third.ok && /交易过/.test(third.err), '同一回合不能发起第三次交易');
 }
 
 console.log('\n交易规则：回合与价值差');

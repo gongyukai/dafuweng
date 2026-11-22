@@ -373,20 +373,25 @@ console.log('\n电脑性格');
   expect(human.persona === null, '真人没有电脑性格');
 }
 
-console.log('\n回合超时跳过（防幽灵玩家卡死）');
+console.log('\n回合超时自动掷骰行动');
 {
-  const { room } = makeGame(2);
+  const { room, players } = makeGame(2);
   room.turn = 0;
   room.phase = 'roll';
   room.turnStartedAt = Date.now() - 1000;
-  expect(!tickStall(room), '没超时不会跳过');
-  room.turnStartedAt = Date.now() - 130000;
-  expect(tickStall(room) && room.turn === 1, '在线玩家 2 分钟超时被跳过');
-  room.players[1].connected = false;
-  room.turn = 1;
-  room.phase = 'roll';
-  room.turnStartedAt = Date.now() - 31000;
-  expect(tickStall(room) && room.turn === 0, '断线玩家 30 秒后跳过');
+  expect(!tickStall(room), '没超时不会行动');
+  const before = players[0].pos;
+  room.turnStartedAt = Date.now() - 61000;
+  expect(tickStall(room), '60 秒超时自动行动');
+  expect(room.turn === 1, '自动完成回合并轮换到下一位');
+  expect(players[0].pos !== before || room.phase === 'ended', '自动掷骰后发生了移动');
+
+  const { room: room2, players: players2 } = makeGame(2);
+  players2[1].connected = false;
+  room2.turn = 1;
+  room2.phase = 'roll';
+  room2.turnStartedAt = Date.now() - 61000;
+  expect(tickStall(room2) && room2.turn === 0, '离线玩家 60 秒后也会自动行动');
 }
 
 console.log('\n租金明细');
@@ -871,6 +876,17 @@ console.log('\n道具二选一在下回合开始');
   expect(act(room, a.id, { type: 'pickItem', i: 1 }).ok, 'A 选择第二个道具');
   expect(a.items.length === before + 1 && a.items.includes('shield'), '拿到免租卡');
   expect(room.phase === 'roll', '选完道具进入掷骰');
+}
+
+console.log('\n净资产与财富系数可见');
+{
+  const { room, players } = makeGame(2);
+  const v = view(room, players[0].id);
+  const p0 = v.players.find((p) => p.id === players[0].id);
+  const p1 = v.players.find((p) => p.id === players[1].id);
+  expect(typeof p0.worth === 'number' && p0.worth >= 1500, '玩家视图包含总资产');
+  expect(p0.wealthFactor >= 0.5 && p0.wealthFactor <= 2, `财富系数在 0.5–2 之间（${p0.wealthFactor}）`);
+  expect(p1.wealthFactor >= 0.5 && p1.wealthFactor <= 2, '其他玩家的系数也可见');
 }
 
 console.log(`\n🎉 新玩法单测全部通过（${passed} 项断言）`);

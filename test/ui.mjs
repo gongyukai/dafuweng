@@ -151,8 +151,14 @@ assert(hasRoll, '没有掷骰子按钮');
 await ev("document.querySelector('button[data-act=\"roll\"]').click()");
 // 三骰选二：先选一组骰子，再（如有）确认调整
 await until("!!document.querySelector('[data-act=\"pickDice\"]')", '骰子选择', 10000);
+const dieCount = await ev("document.querySelectorAll('.dice-row .die').length");
+assert(dieCount === 3, `中央应显示 3 颗骰子（实际 ${dieCount}）`);
+assert(await ev("!!document.querySelector('#turnTimer')"), '应显示回合倒计时');
 await ev("document.querySelector('[data-act=\"pickDice\"]').click()");
 await sleep(150);
+const pickedCount = await ev("document.querySelectorAll('.dice-row .die.picked').length");
+const dimCount = await ev("document.querySelectorAll('.dice-row .die.unpicked').length");
+assert(pickedCount === 2 && dimCount === 1, `选中的两颗变亮、另一颗变暗（${pickedCount}/${dimCount}）`);
 if (await ev("!!document.querySelector('[data-act=\"adjustRoll\"]')")) {
   await ev("document.querySelector('[data-act=\"adjustRoll\"][data-delta=\"0\"]').click()");
   await sleep(150);

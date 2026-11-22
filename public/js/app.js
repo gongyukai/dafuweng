@@ -49,6 +49,16 @@ const S = {
   chatSeen: null,
 };
 
+// 回合倒计时：每 500ms 刷新一次
+S.turnDeadline = 0;
+setInterval(() => {
+  const el = document.getElementById('turnTimer');
+  if (!el) return;
+  const left = Math.max(0, Math.ceil((S.turnDeadline - Date.now()) / 1000));
+  el.textContent = `${left}s`;
+  el.classList.toggle('low', left <= 10);
+}, 500);
+
 const PIPS = {  1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8],
 };
 
@@ -340,12 +350,12 @@ function tileEl(t, v) {
   return el;
 }
 
-function dieHTML(face, rolling) {
+function dieHTML(face, rolling, state) {
   if (!face) return '<div class="die dim"><span class="die-q">?</span></div>';
   const on = new Set(PIPS[face] || PIPS[1]);
   let cells = '';
   for (let i = 0; i < 9; i++) cells += `<span class="pip${on.has(i) ? ' on' : ''}"></span>`;
-  return `<div class="die${rolling ? ' rolling' : ''}">${cells}</div>`;
+  return `<div class="die${rolling ? ' rolling' : ''}${state ? ' ' + state : ''}">${cells}</div>`;
 }
 
 function tileBox(pos) {
@@ -586,10 +596,24 @@ function renderCenter(v) {
 
   const cur = v.players.find((p) => p.id === v.turnId);
   const isMine = v.turnId === S.me;
-  const [a, b] = v.dice;
-  const diceKey = `${a}-${b}-${v.turnId || ''}-${v.round}`;
-  const rolling = diceKey !== S.lastDiceKey && a > 0;
+  const roll = Array.isArray(v.diceRoll) && v.diceRoll.length ? v.diceRoll : null;
+  const diceKey = `${roll ? roll.join('-') : v.dice.join('-')}-${v.turnId || ''}-${v.round}`;
+  const rolling = diceKey !== S.lastDiceKey && !!(roll ? roll.length : v.dice[0]);
   S.lastDiceKey = diceKey;
+  const pickedIdx = v.dicePick != null && v.diceOptions && v.diceOptions[v.dicePick]
+    ? v.diceOptions[v.dicePick].idx : null;
+  let diceRow;
+  if (roll && roll.length >= 3) {
+    diceRow = roll.map((face, i) => {
+      const state = pickedIdx ? (pickedIdx.includes(i) ? 'picked' : 'unpicked') : '';
+      return dieHTML(face, rolling, state);
+    }).join('');
+  } else if (roll && roll.length === 2) {
+    diceRow = roll.map((face) => dieHTML(face, rolling, 'picked')).join('') + '<div class="die dim"><span class="die-q">?</span></div>';
+  } else {
+    diceRow = '<div class="die dim"><span class="die-q">?</span></div>'.repeat(3);
+  }
+  S.turnDeadline = Date.now() + (v.turnRemainingMs || 0);
 
   const cardKey = v.lastCard ? `${v.lastCard.deck}:${v.lastCard.text}` : null;
   const cardChanged = cardKey && cardKey !== S.lastCardKey;
@@ -610,13 +634,14 @@ function renderCenter(v) {
     <div class="cc-block">
       <div class="cc-top">
         <span class="cc-round">第 ${v.round} / ${v.roundLimit} 回合</span>
+        <span class="cc-timer" id="turnTimer">${Math.ceil((v.turnRemainingMs || 0) / 1000)}s</span>
         ${ev ? `<span class="cc-event">${mi(EVENT_ICON[ev.id] || 'assets/ui/bolt.svg')}${esc(ev.name)}</span>` : ''}
         <div class="cc-turn-row">
           ${cur ? `<img class="cc-av" src="${curPiece}" alt="">` : ''}
           <span class="cc-turn${isMine ? ' mine' : ''}">${turnText}</span>
         </div>
       </div>
-      <div class="dice-row">${dieHTML(a, rolling)}${dieHTML(b, rolling)}</div>
+      <div class="dice-row">${diceRow}</div>
     </div>
     <div class="cc-block">
       ${focusCard(v, focusIdx)}
@@ -655,7 +680,7 @@ function renderPlayers(v) {
         <span class="pavatar" style="--pc:${p.color}"><img src="${icon(pieceOf(p.piece).file)}" alt=""></span>
         <div class="pinfo">
           <b>${esc(p.name)}${p.id === S.me ? ' <span class="me">(我)</span>' : ''}</b>
-          <small>¥${fmt(p.cash)} · ${mine.length} 块地${p.jailCards ? ` · 出狱卡×${p.jailCards}` : ''}${itemTag}</small>
+          <small>现金 ¥${fmt(p.cash)} · 总资产 ¥${fmt(p.worth)} · 系数 ×${(p.wealthFactor || 1).toFixed(1)} · ${mine.length} 块地${p.jailCards ? ` · 出狱卡×${p.jailCards}` : ''}${itemTag}</small>
         </div>
         <div class="ptags">${tags.join('')}</div>
       </div>
@@ -708,11 +733,13 @@ function missionCardHTML(v, me) {
   if (!me || !me.mission) return '';
   const text = me.missionText || me.mission;
   const reward = me.missionRewardBase || 0;
+  const factor = me.wealthFactor || 1;
+  const actual = Math.round((reward * factor) / 10) * 10;
   const prog = me.missionDone ? '' : missionProgress(v, me);
   return `<div class="mission-card${me.missionDone ? ' done' : ''}">
     <span class="mc-ico">${mi('assets/ui/bullseye.svg')}</span>
     <div class="mc-body"><b>秘密任务</b><span>${esc(text)}</span>${prog ? `<small class="mc-prog">${prog}</small>` : ''}</div>
-    <em>${me.missionDone ? '已完成' : `奖励 ¥${fmt(reward)}`}<small>财富系数 0.5–2×</small></em>
+    <em>${me.missionDone ? '已完成' : `奖励 ¥${fmt(reward)}`}<small>当前系数 ×${factor.toFixed(1)} ≈ ¥${fmt(actual)}</small></em>
   </div>`;
 }
 
@@ -878,8 +905,9 @@ function tradeBarHTML(v, me) {
     </div>`;
   }
   if (v.turnId !== me.id) return '<div class="trade-tip">只能在自己的回合发起交易</div>';
-  if ((me.tradesThisTurn || 0) >= 1) return '<div class="trade-tip">本回合已经交易过了（每回合 1 次）</div>';
-  return '<button class="btn wide trade-open" data-ui="trade">' + mi('assets/ui/handshake.svg') + ' 发起交易</button>';
+  const tradeLeft = Math.max(0, 2 - (me.tradesThisTurn || 0));
+  if (tradeLeft <= 0) return '<div class="trade-tip">本回合 2 次交易已用完</div>';
+  return `<button class="btn wide trade-open" data-ui="trade">${mi('assets/ui/handshake.svg')} 发起交易（剩余 ${tradeLeft} 次）</button>`;
 }
 
 function tileBtn(v, i, side, selected) {
@@ -921,7 +949,7 @@ function renderTradeModal() {
     </button>`).join('');
 
   $('#modalCard').innerHTML = `<h2 class="trade-title">玩家间交易</h2>
-    <p class="trade-hint">只能在自己的回合发起，每回合最多 1 次；双方交易内容的实际价值相差不能超过 ¥100。</p>
+    <p class="trade-hint">只能在自己的回合发起，每回合最多 2 次；双方交易内容的实际价值相差不能超过 ¥100。</p>
     <div class="trade-tabs">${tabs}</div>
     <div class="trade-cols">
       <div class="trade-col">
@@ -1081,9 +1109,11 @@ function renderAction(v) {  const me = v.players.find((p) => p.id === S.me);
         <p class="act-msg">掷出三颗骰子，选两个决定这次走多少格。</p>
         <div class="mission-picks">${opts.map((o, i) => {
           const dest = (me.pos + o.total) % 40;
-          return `<button class="mission-opt" data-act="pickDice" data-i="${i}">
+          const ownerId = v.owners[dest];
+          const owner = ownerId ? v.players.find((p) => p.id === ownerId) : null;
+          return `<button class="mission-opt" data-act="pickDice" data-i="${i}"${owner ? ` style="border-left:5px solid ${owner.color}"` : ''}>
             <b>${o.dice[0]} + ${o.dice[1]} = ${o.total}${o.double ? ' · 双数' : ''}</b>
-            <span>落点：${esc(BOARD[dest].name)}${me.pos + o.total >= 40 ? ' · 经过起点' : ''}</span>
+            <span>落点：${esc(BOARD[dest].name)}${owner ? ` · ${esc(owner.name)}` : ' · 无主'}${me.pos + o.total >= 40 ? ' · 经过起点' : ''}</span>
           </button>`;
         }).join('')}</div>`;
     } else {
